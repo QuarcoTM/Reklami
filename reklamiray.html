@@ -1,1 +1,70 @@
-<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Пусни реклама — Kyustendil Screen</title><meta name="description" content="Заявка за реклама на екраните в Кюстендил."><link rel="stylesheet" href="styles.css"></head><body data-page="advertise"><header class="site-header"><div class="container nav"><a class="brand" href="index.html"><img class="brand-logo" src="assets/logo.svg" alt="Kyustendil Screen"><span class="brand-text"><b>KYUSTENDIL <em>SCREEN</em></b><small>рекламни екрани в Кюстендил</small></span></a><button class="mobile-toggle" aria-label="Меню">☰</button><nav class="nav-links"><a data-current="home" href="index.html">Начало</a><a data-current="locations" href="lokacii.html">Локации</a><a data-current="pricing" href="ceni.html">Пакети и цени</a><a data-current="how" href="kak-raboti.html">Как работи</a><a data-current="partners" href="partneri.html">За партньори</a><a data-current="contact" href="kontakti.html">Контакти</a><a class="btn btn-accent" data-current="advertise" href="reklamiray.html">Пусни реклама</a></nav></div></header><main><section class="page-hero"><div class="container"><span class="badge">РЕКЛАМИРАЙ</span><h1>Изпрати заявка за реклама.</h1><p>В тази GitHub Pages версия формата отваря готов email. По-късно може да добавим автоматично плащане и upload.</p></div></section><section class="section alt"><div class="container form-wrap"><form id="requestForm"><label>Фирма / бранд</label><input name="company" required><label>Лице за контакт</label><input name="name" required><label>Телефон</label><input name="phone" required><label>Email</label><input name="email" type="email" required><label>Пакет</label><select name="package"><option>SINGLE — 1 екран</option><option>LOCAL — до 3 екрана</option><option>CITY 5 — до 5 екрана</option><option>CITY 10 — до 10 екрана</option></select><label>Период</label><select name="period"><option>1 месец</option><option>3 месеца</option><option>6 месеца</option><option>12 месеца</option></select><label>Имаш ли готова реклама?</label><select name="creative"><option>Да</option><option>Не — искам изработка</option></select><label>Бележка / предпочитани локации</label><textarea name="message"></textarea><p class="help">След изпращане ще се отвори email клиентът с готов текст.</p><button class="btn btn-accent" type="submit">Изпрати заявка</button></form><aside><div class="card"><span class="badge">ФОРМАТ</span><h2 style="font-size:34px">Рекламата трябва да се разбира за секунди.</h2><ul class="checks"><li>16:9 хоризонтална визия</li><li>голям четим текст</li><li>8–10 секунди видео</li><li>JPG / PNG / MP4</li><li>QR код при нужда</li></ul></div></aside></div></section></main><footer class="footer"><div class="container footer-grid"><div><a class="brand" href="index.html"><img class="brand-logo" src="assets/logo.svg" alt="Kyustendil Screen"><span class="brand-text"><b>KYUSTENDIL <em>SCREEN</em></b><small>локална дигитална реклама</small></span></a><p style="color:var(--muted);max-width:440px">Пилотна рекламна мрежа за местни бизнеси в Кюстендил.</p></div><div><strong>Навигация</strong><div class="footer-links"><a href="lokacii.html">Локации</a><a href="ceni.html">Цени</a><a href="kak-raboti.html">Как работи</a><a href="partneri.html">За партньори</a></div></div><div><strong>Контакти</strong><div class="footer-links"><a href="mailto:info@kyustendilscreen.bg">info@kyustendilscreen.bg</a><a href="tel:+359888123456">0888 123 456</a><span style="color:var(--muted)">Кюстендил, България</span></div></div></div></footer><script src="script.js"></script></body></html>
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fbf8f1">
+  <title>Пусни реклама — Kyustendil Screen</title>
+  <meta name="description" content="Изпрати запитване за реклама на екраните в Кюстендил.">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="advertise">
+<header class="site-header">
+  <div class="container navbar">
+    <a class="logo-link" href="index.html" aria-label="Kyustendil Screen — начало">
+      <img class="logo-main" src="assets/kyustendil-screen-logo.png" alt="Kyustendil Screen — рекламни екрани в Кюстендил">
+    </a>
+    <button class="mobile-toggle" aria-label="Отвори меню" type="button">☰</button>
+    <nav class="nav-links" aria-label="Основна навигация">
+      <a data-page-link="home" href="index.html">Начало</a>
+      <a data-page-link="locations" href="lokacii.html">Локации</a>
+      <a data-page-link="pricing" href="ceni.html">Пакети и цени</a>
+      <a data-page-link="how" href="kak-raboti.html">Как работи</a>
+      <a data-page-link="examples" href="primeri.html">Примери</a>
+      <a data-page-link="partners" href="partneri.html">За партньори</a>
+      <a data-page-link="contact" href="kontakti.html">Контакти</a>
+      <a class="nav-cta" data-page-link="advertise" href="reklamiray.html">Пусни реклама</a>
+    </nav>
+  </div>
+</header>
+<main>
+<section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати запитване</h1><p>Формата е подготвена за GitHub Pages. Преди публичния старт трябва само да я свържем с реален email или форма услуга.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
+<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form><h2>Заявка за реклама</h2><div class="field"><label>Фирма / бранд</label><input required name="company" placeholder="Име на бизнеса"></div><div class="field"><label>Лице за контакт</label><input required name="name" placeholder="Име"></div><div class="field"><label>Телефон</label><input required name="phone" type="tel" placeholder="Телефон"></div><div class="field"><label>Email</label><input required name="email" type="email" placeholder="email@example.com"></div><div class="field"><label>Пакет</label><select name="package"><option>SINGLE — €25 / месец</option><option>LOCAL — €49 / месец</option><option>CITY — от €69 / месец</option></select></div><div class="field"><label>Предпочитани локации</label><input name="locations" placeholder="Напр. аптека + заведение"></div><div class="field" id="design"><label>Имаш ли готова реклама?</label><select name="design"><option>Да, имам готова визия</option><option>Не — искам базова статична визия</option><option>Не — искам дизайн от нулата</option><option>Искам кратко видео</option></select></div><div class="field"><label>Бележка</label><textarea name="message" placeholder="Оферта, период, въпроси..."></textarea></div><p class="form-help">В preview версията формата не изпраща данни към външен сървър.</p><button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack"><aside class="card info-card"><span class="badge badge-blue">Формат</span><h3>Рекламата трябва да се разбира за секунди</h3><ul class="checks"><li>16:9 хоризонтално</li><li>Кратък и голям текст</li><li>1 ясно послание</li><li>JPG, PNG или MP4</li><li>QR код при нужда</li></ul></aside><aside class="promo-note"><span class="badge badge-blue">Пилотна оферта</span><p><strong>Базова статична визия безплатно за първите 10 рекламодатели.</strong></p><p>След пилотната оферта базовата изработка започва от €15.</p></aside></div></div></section>
+</main>
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <img class="footer-logo" src="assets/kyustendil-screen-logo.png" alt="Kyustendil Screen">
+        <div class="footer-copy">Локална мрежа от рекламни екрани в Кюстендил. Избираш къде да присъства бизнесът ти, а излъчването се управлява дистанционно.</div>
+      </div>
+      <div>
+        <div class="footer-title">Навигация</div>
+        <div class="footer-links">
+          <a href="lokacii.html">Локации</a>
+          <a href="ceni.html">Пакети и цени</a>
+          <a href="kak-raboti.html">Как работи</a>
+          <a href="primeri.html">Примерни реклами</a>
+        </div>
+      </div>
+      <div>
+        <div class="footer-title">За бизнеса</div>
+        <div class="footer-links">
+          <a href="reklamiray.html">Пусни реклама</a>
+          <a href="partneri.html">Стани партньор</a>
+          <a href="kontakti.html">Контакти</a>
+          <span>Кюстендил, България</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Kyustendil Screen. Контактите и юридическите данни се добавят преди публичния старт.</span>
+      <div class="footer-colors" aria-label="Бранд цветове"><span class="c1"></span><span class="c2"></span><span class="c3"></span></div>
+    </div>
+  </div>
+</footer>
+<div class="toast" role="status" aria-live="polite"></div>
+<script src="script.js"></script>
+</body>
+</html>

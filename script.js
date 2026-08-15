@@ -1,2 +1,44 @@
+document.addEventListener('DOMContentLoaded', () => {
+  const menuButton = document.querySelector('.mobile-toggle');
+  const nav = document.querySelector('.nav-links');
+  if (menuButton && nav) {
+    menuButton.addEventListener('click', () => nav.classList.toggle('open'));
+  }
 
-document.addEventListener('DOMContentLoaded',()=>{const b=document.querySelector('.mobile-toggle'),n=document.querySelector('.nav-links');if(b&&n)b.addEventListener('click',()=>n.classList.toggle('open'));document.querySelectorAll('[data-current]').forEach(el=>{if(el.dataset.current===document.body.dataset.page)el.classList.add('active')});const bind=(id,subject,fields)=>{const f=document.querySelector(id);if(!f)return;f.addEventListener('submit',e=>{e.preventDefault();const d=new FormData(f);const body=encodeURIComponent(fields.map(([l,k])=>`${l}: ${d.get(k)||''}`).join('\n'));location.href=`mailto:info@kyustendilscreen.bg?subject=${encodeURIComponent(subject)}&body=${body}`})};bind('#requestForm','Запитване за реклама — Kyustendil Screen',[['Фирма','company'],['Лице за контакт','name'],['Телефон','phone'],['Email','email'],['Пакет','package'],['Период','period'],['Готова реклама','creative'],['Бележка','message']]);bind('#partnerForm','Предложение за локация — Kyustendil Screen',[['Обект','business'],['Лице за контакт','name'],['Телефон','phone'],['Адрес','address'],['Тип','type'],['Бележка','message']])});
+  const current = document.body.dataset.page;
+  document.querySelectorAll('[data-page-link]').forEach(link => {
+    if (link.dataset.pageLink === current) link.classList.add('active');
+  });
+
+  document.querySelectorAll('.faq-question').forEach(button => {
+    button.addEventListener('click', () => {
+      const item = button.closest('.faq-item');
+      const answer = item.querySelector('.faq-answer');
+      const wasOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(openItem => {
+        openItem.classList.remove('open');
+        openItem.querySelector('.faq-answer').style.maxHeight = null;
+      });
+      if (!wasOpen) {
+        item.classList.add('open');
+        answer.style.maxHeight = answer.scrollHeight + 'px';
+      }
+    });
+  });
+
+  const toast = document.querySelector('.toast');
+  function showToast(message){
+    if(!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4200);
+  }
+
+  document.querySelectorAll('form[data-demo-form]').forEach(form => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      showToast('Формата е готова за свързване с реален email/бекенд преди публичния старт.');
+    });
+  });
+});
