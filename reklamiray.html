@@ -1,81 +1,115 @@
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="bg">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<meta content="#fbf8f1" name="theme-color"/>
-<title>Пусни реклама — Kyustendil Screen</title>
-<meta content="Изпрати запитване за реклама на екраните в Кюстендил." name="description"/>
-<link href="assets/favicon.png" rel="icon" type="image/png"/>
-<link href="styles.css" rel="stylesheet"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fbf8f1">
+  <title>Пусни реклама — Kyustendil Screen</title>
+  <meta name="description" content="Изпрати запитване за реклама на екраните в Кюстендил.">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body data-page="advertise">
 <header class="site-header">
-<div class="container navbar">
-<a aria-label="Kyustendil Screen — начало" class="logo-link" href="index.html">
-<img alt="Kyustendil Screen — рекламни екрани в Кюстендил" class="logo-main" src="assets/kyustendil-screen-logo.png"/>
-</a>
-<button aria-label="Отвори меню" class="mobile-toggle" type="button">☰</button>
-<nav aria-label="Основна навигация" class="nav-links">
-<a data-page-link="home" href="index.html">Начало</a>
-<a data-page-link="locations" href="lokacii.html">Локации</a>
-<a data-page-link="pricing" href="ceni.html">Пакети и цени</a>
-<a data-page-link="how" href="kak-raboti.html">Как работи</a>
-<a data-page-link="examples" href="primeri.html">Примери</a>
-<a data-page-link="partners" href="partneri.html">За партньори</a>
-<a data-page-link="contact" href="kontakti.html">Контакти</a>
-<a class="nav-cta" data-page-link="advertise" href="reklamiray.html">Пусни реклама</a>
-</nav>
-</div>
+  <div class="container navbar">
+    <a class="logo-link" href="index.html" aria-label="Kyustendil Screen — начало">
+      <img class="logo-main" src="assets/kyustendil-screen-logo.png" alt="Kyustendil Screen — рекламни екрани в Кюстендил">
+    </a>
+    <button class="mobile-toggle" aria-label="Отвори меню" type="button">☰</button>
+    <nav class="nav-links" aria-label="Основна навигация">
+      <a data-page-link="home" href="index.html">Начало</a>
+      <a data-page-link="locations" href="lokacii.html">Локации</a>
+      <a data-page-link="pricing" href="ceni.html">Пакети и цени</a>
+      <a data-page-link="how" href="kak-raboti.html">Как работи</a>
+      <a data-page-link="examples" href="primeri.html">Примери</a>
+      <a data-page-link="partners" href="partneri.html">За партньори</a>
+      <a data-page-link="contact" href="kontakti.html">Контакти</a>
+      <a class="nav-cta" data-page-link="advertise" href="reklamiray.html">Пусни реклама</a>
+    </nav>
+  </div>
 </header>
 <main>
-<section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати запитване</h1><p>Формата е подготвена за GitHub Pages. Преди публичния старт трябва само да я свържем с реален email или форма услуга.</p><div aria-hidden="true" class="brand-rule"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
-<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form=""><h2>Заявка за реклама</h2><div class="field"><label>Фирма / бранд</label><input name="company" placeholder="Име на бизнеса" required=""/></div><div class="field"><label>Лице за контакт</label><input name="name" placeholder="Име" required=""/></div><div class="field"><label>Телефон</label><input name="phone" placeholder="Телефон" required="" type="tel"/></div><div class="field"><label>Email</label><input name="email" placeholder="email@example.com" required="" type="email"/></div><div class="field"><label>Пакет</label><select name="package"><option>SINGLE — €25 / месец</option><option>LOCAL — €49 / месец</option><option>CITY — от €69 / месец</option></select></div><div class="field"><label>Предпочитани локации</label><input name="locations" placeholder="Напр. аптека + заведение"/></div><fieldset class="creative-field" id="design">
-<legend>Рекламна визия</legend>
-<p class="creative-help">Избери какво да подготвим. Добавката за изработка е еднократна и не се начислява всеки месец.</p>
-<div class="creative-options">
-<label class="creative-option"><input checked="" name="design" type="radio" value="Готова визия — €0"/><span class="creative-check"></span><span class="creative-copy"><strong>Имам готова реклама</strong><small>Изпращаш готов JPG, PNG или MP4.</small></span><span class="creative-price">€0</span></label>
-<label class="creative-option"><input name="design" type="radio" value="Статична визия — +€3 еднократно"/><span class="creative-check"></span><span class="creative-copy"><strong>Искам статична визия</strong><small>Изпращаш лого, текст, снимка и контакти.</small></span><span class="creative-price">+€3 <small>еднократно</small></span></label>
-<label class="creative-option"><input name="design" type="radio" value="Кратко видео — +€10 еднократно"/><span class="creative-check"></span><span class="creative-copy"><strong>Искам кратко видео</strong><small>Кратка анимирана реклама, подходяща за екраните.</small></span><span class="creative-price blue">+€10 <small>еднократно</small></span></label>
-</div></fieldset><div class="field"><label>Бележка</label><textarea name="message" placeholder="Оферта, период, въпроси..."></textarea></div><p class="form-help">В preview версията формата не изпраща данни към външен сървър.</p><button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack">
-<aside class="card info-card"><span class="badge badge-blue">Изработка на визия</span><h3>Нямаш готова реклама?</h3><p>Избираш статична или видео визия директно във формата. Цената за изработка е еднократна добавка към избрания рекламен пакет.</p><div class="mini-prices"><div><span>Статична визия</span><strong>+€3</strong></div><div><span>Кратко видео</span><strong class="blue">+€10</strong></div></div></aside>
-<aside class="card info-card"><span class="badge badge-gold">Формат</span><h3>Имаш готов файл?</h3><p>Провери техническите изисквания за формат, размер и продължителност.</p><a class="btn btn-gold btn-small" href="tehnicheski-iziskvaniya.html">Виж изискванията</a></aside>
+<section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати запитване</h1><p>Формата е подготвена за GitHub Pages. Преди публичния старт трябва само да я свържем с реален email или форма услуга.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
+<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form><h2>Заявка за реклама</h2><p class="required-note"><span>*</span> – задължително поле</p>
+<div class="field"><label>Фирма / бранд <span class="required-star">*</span></label><input required name="company" placeholder="Име на бизнеса"></div>
+<div class="field"><label>Лице за контакт <span class="required-star">*</span></label><input required name="name" placeholder="Име"></div>
+<div class="field"><label>Телефон <span class="required-star">*</span></label><input required name="phone" type="tel" placeholder="Телефон"></div>
+<div class="field"><label>Email <span class="required-star">*</span></label><input required name="email" type="email" placeholder="email@example.com"></div>
+<div class="field field-panel field-package"><label>Пакет <span class="required-star">*</span></label><select required name="package"><option value="" disabled selected>Избери пакет</option><option>SINGLE — €25 / месец</option><option>LOCAL — €49 / месец</option><option>CITY — от €69 / месец</option></select></div>
+<div class="field"><label>Предпочитани локации <span class="optional-label">по желание</span></label><input name="locations" placeholder="Напр. аптека + заведение"></div>
+<fieldset class="creative-field creative-panel" id="design">
+      <legend>Рекламна визия <span class="required-star">*</span></legend>
+      <p class="creative-help">Избери една опция. Добавката за изработка е еднократна и не се начислява всеки месец.</p>
+      <div class="creative-options">
+        <label class="creative-option">
+          <input type="radio" name="design" value="Готова визия — €0" required>
+          <span class="creative-check"></span>
+          <span class="creative-copy"><strong>Имам готова реклама</strong><small>Изпращаш готов JPG, PNG или MP4.</small></span>
+          <span class="creative-price">€0</span>
+        </label>
+        <label class="creative-option">
+          <input type="radio" name="design" value="Статична визия — +€3 еднократно">
+          <span class="creative-check"></span>
+          <span class="creative-copy"><strong>Искам статична визия</strong><small>Изпращаш лого, текст, снимка и контакти.</small></span>
+          <span class="creative-price">+€3 <small>еднократно</small></span>
+        </label>
+        <label class="creative-option">
+          <input type="radio" name="design" value="Кратко видео — +€10 еднократно">
+          <span class="creative-check"></span>
+          <span class="creative-copy"><strong>Искам кратко видео</strong><small>Кратка анимирана реклама, подходяща за екраните.</small></span>
+          <span class="creative-price blue">+€10 <small>еднократно</small></span>
+        </label>
+      </div>
+    </fieldset>
+    <div class="field"><label>Бележка <span class="required-star">*</span></label><textarea required name="message" placeholder="Опиши офертата, периода или какво искаш да рекламираш..."></textarea></div><p class="form-help">В preview версията формата не изпраща данни към външен сървър.</p><button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack">
+  <aside class="card info-card">
+    <span class="badge badge-blue">Изработка на визия</span>
+    <h3>Нямаш готова реклама?</h3>
+    <p>Няма проблем. Избираш статична или видео визия директно във формата. Цената за изработка е еднократна добавка към избрания рекламен пакет.</p>
+    <div class="mini-prices"><div><span>Статична визия</span><strong>+€3</strong></div><div><span>Кратко видео</span><strong class="blue">+€10</strong></div></div>
+  </aside>
+  <aside class="card info-card">
+    <span class="badge badge-gold">Формат</span>
+    <h3>Имаш готов файл?</h3>
+    <p>Провери техническите изисквания за формат, размер и продължителност.</p>
+    <a class="btn btn-gold btn-small" href="tehnicheski-iziskvaniya.html">Виж изискванията</a>
+  </aside>
 </div></div></section>
 </main>
 <footer class="site-footer">
-<div class="container">
-<div class="footer-grid">
-<div>
-<img alt="Kyustendil Screen" class="footer-logo" src="assets/kyustendil-screen-logo.png"/>
-<div class="footer-copy">Локална мрежа от рекламни екрани в Кюстендил. Избираш къде да присъства бизнесът ти, а излъчването се управлява дистанционно.</div>
-</div>
-<div>
-<div class="footer-title">Навигация</div>
-<div class="footer-links">
-<a href="lokacii.html">Локации</a>
-<a href="ceni.html">Пакети и цени</a>
-<a href="kak-raboti.html">Как работи</a>
-<a href="primeri.html">Примерни реклами</a><a href="faq.html">FAQ</a>
-</div>
-</div>
-<div>
-<div class="footer-title">За бизнеса</div>
-<div class="footer-links">
-<a href="reklamiray.html">Пусни реклама</a>
-<a href="partneri.html">Стани партньор</a>
-<a href="kontakti.html">Контакти</a>
-<span>Кюстендил, България</span>
-</div>
-</div>
-</div>
-<div class="footer-bottom">
-<span>© 2026 Kyustendil Screen. Контактите и юридическите данни се добавят преди публичния старт.</span>
-<div aria-label="Бранд цветове" class="footer-colors"><span class="c1"></span><span class="c2"></span><span class="c3"></span></div>
-</div>
-</div>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <img class="footer-logo" src="assets/kyustendil-screen-logo.png" alt="Kyustendil Screen">
+        <div class="footer-copy">Локална мрежа от рекламни екрани в Кюстендил. Избираш къде да присъства бизнесът ти, а излъчването се управлява дистанционно.</div>
+      </div>
+      <div>
+        <div class="footer-title">Навигация</div>
+        <div class="footer-links">
+          <a href="lokacii.html">Локации</a>
+          <a href="ceni.html">Пакети и цени</a>
+          <a href="kak-raboti.html">Как работи</a>
+          <a href="primeri.html">Примерни реклами</a>
+          <a href="faq.html">FAQ</a>
+        </div>
+      </div>
+      <div>
+        <div class="footer-title">За бизнеса</div>
+        <div class="footer-links">
+          <a href="reklamiray.html">Пусни реклама</a>
+          <a href="partneri.html">Стани партньор</a>
+          <a href="kontakti.html">Контакти</a>
+          <span>Кюстендил, България</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Kyustendil Screen. Контактите и юридическите данни се добавят преди публичния старт.</span>
+      <div class="footer-colors" aria-label="Бранд цветове"><span class="c1"></span><span class="c2"></span><span class="c3"></span></div>
+    </div>
+  </div>
 </footer>
-<div aria-live="polite" class="toast" role="status"></div>
+<div class="toast" role="status" aria-live="polite"></div>
 <script src="script.js"></script>
 </body>
 </html>
