@@ -18,6 +18,16 @@
 
   const packageNames = { single:'SINGLE', local:'LOCAL', city:'CITY' };
 
+  const screenNames = {
+    funeral:'Траурна агенция',
+    pharmacy:'Аптека',
+    restaurant:'Заведение'
+  };
+
+  function assignedNames(r){
+    return (r.assignedScreens || []).map(id => screenNames[id]).filter(Boolean);
+  }
+
   function esc(v=''){
     return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   }
@@ -201,7 +211,7 @@
             <div class="request-main">
               <span class="request-id">${esc(r.id)}</span>
               <h3>${esc(r.company || 'Рекламна кампания')}</h3>
-              <p>${esc(pkg)} · ${esc(r.designLabel || '')}</p>
+              <p>${esc(pkg)} · ${esc(r.designLabel || '')}${(r.assignedScreens||[]).length ? ` · ${(r.assignedScreens||[]).length} ${(r.assignedScreens||[]).length===1?'екран':'екрана'}` : ''}</p>
             </div>
             <span class="status-pill ${st.cls}">${esc(st.label)}</span>
           </div>
@@ -292,11 +302,16 @@
         <h4>Информация</h4>
         <div class="detail-grid">
           <div class="detail-box"><span>Фирма / бранд</span><strong>${esc(r.company||'—')}</strong></div>
-          <div class="detail-box"><span>Локации</span><strong>${esc(r.locations||'Не са посочени')}</strong></div>
+          <div class="detail-box"><span>Предпочитани локации</span><strong>${esc(r.locations||'Не са посочени')}</strong></div>
           <div class="detail-box"><span>Подадена</span><strong>${formatDate(r.createdAt)}</strong></div>
           <div class="detail-box"><span>Контакт</span><strong>${esc(r.email||'—')}</strong></div>
         </div>
       </div>
+      ${(r.assignedScreens||[]).length ? `
+      <div class="detail-section">
+        <h4>${r.status==='active' ? 'Къде се излъчва рекламата' : 'Планирани екрани'}</h4>
+        <div class="client-screen-chips">${assignedNames(r).map(name => `<span>${esc(name)}</span>`).join('')}</div>
+      </div>` : ''}
       ${(r.creativeText||r.creativeContact)?`
       <div class="detail-section">
         <h4>Подадено съдържание</h4>

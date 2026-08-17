@@ -392,3 +392,8 @@ button{cursor:pointer}
   .creative-decision-actions{grid-template-columns:1fr}
   .client-dialog-actions{display:grid;grid-template-columns:1fr}
 }
+
+
+/* Assigned screens v2.2 */
+.client-screen-chips{display:flex;flex-wrap:wrap;gap:8px}
+.client-screen-chips span{display:inline-flex;align-items:center;min-height:38px;padding:7px 11px;border-radius:999px;background:var(--blue-soft);color:var(--blue);border:1px solid #d9e4ff;font-size:13px;font-weight:900}
