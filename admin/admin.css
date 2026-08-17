@@ -199,3 +199,96 @@ button{cursor:pointer}
   .login-card{padding:26px 20px}
   .login-card h1{font-size:32px}
 }
+
+
+/* Client change request v1.2 */
+.change-request-note{
+  background:#fff6df;
+  border:1px solid #efd89d;
+  border-radius:14px;
+  padding:14px;
+  line-height:1.55;
+}
+.change-request-note strong{
+  display:block;
+  white-space:pre-wrap;
+}
+.change-request-note small{
+  display:block;
+  margin-top:8px;
+  color:var(--muted);
+}
+.change-dialog-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:200;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  background:rgba(18,18,18,.48);
+}
+.change-dialog-backdrop.show{display:flex}
+.change-dialog{
+  width:min(590px,100%);
+  background:#fff;
+  border-radius:22px;
+  padding:22px;
+  box-shadow:0 24px 70px rgba(0,0,0,.24);
+}
+.change-dialog-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+}
+.change-dialog h3{
+  margin:6px 0 0;
+  font-size:27px;
+  line-height:1.08;
+}
+.change-dialog-close{
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  border:1px solid var(--line);
+  border-radius:50%;
+  background:#fff;
+  font-size:25px;
+}
+.change-dialog-help{
+  margin:16px 0 10px;
+  color:var(--muted);
+  line-height:1.5;
+}
+.change-dialog textarea{
+  width:100%;
+  resize:vertical;
+  min-height:145px;
+  border:1px solid #d8d2c8;
+  border-radius:14px;
+  padding:13px 14px;
+  outline:none;
+  font:inherit;
+  line-height:1.5;
+}
+.change-dialog textarea:focus{
+  border-color:#d8a640;
+  box-shadow:0 0 0 3px rgba(216,166,64,.14);
+}
+.change-dialog-error{
+  margin-top:8px;
+  color:#b84242;
+  font-size:13px;
+  font-weight:800;
+}
+.change-dialog-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:16px;
+}
+@media(max-width:560px){
+  .change-dialog-actions{display:grid;grid-template-columns:1fr}
+  .change-dialog-actions .btn{width:100%}
+}

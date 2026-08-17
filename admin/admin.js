@@ -360,6 +360,14 @@
           </div>`).join('') : '<p class="small-muted">Няма качени файлове.</p>'}
       </div>
       ${r.message ? `<div class="drawer-section"><h4>Бележка</h4><div class="note-box">${esc(r.message)}</div></div>` : ''}
+      ${r.changeRequestText ? `
+        <div class="drawer-section">
+          <h4>Последно поискана промяна</h4>
+          <div class="change-request-note">
+            <strong>${esc(r.changeRequestText)}</strong>
+            ${r.changeRequestedAt ? `<small>${formatDate(r.changeRequestedAt)}</small>` : ''}
+          </div>
+        </div>` : ''}
       <div class="drawer-section"><h4>Подадена</h4><p>${formatDate(r.createdAt)}</p></div>
     `;
   }
@@ -394,6 +402,96 @@
     openRequest(id);
   }
 
+  function openChangeRequestDialog(id){
+    const r = loadRequests().find(x => x.id === id);
+    if (!r) return;
+
+    let dialog = document.getElementById('changeRequestDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'changeRequestDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog" role="dialog" aria-modal="true" aria-labelledby="changeDialogTitle">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ПОИСКАЙ ПРОМЯНА</span>
+              <h3 id="changeDialogTitle">Какво трябва да промени клиентът?</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+
+          <p class="change-dialog-help">
+            Напиши го свободно с думи. Клиентът ще види точно този текст в профила си.
+          </p>
+
+          <textarea id="changeRequestText" rows="6"
+            placeholder="Например: Моля, качете логото във висока резолюция и добавете телефон за контакт."></textarea>
+
+          <div class="change-dialog-error" id="changeRequestError" hidden>
+            Напиши каква промяна е необходима.
+          </div>
+
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-change-cancel>Отказ</button>
+            <button type="button" class="btn btn-warning" data-change-send>Изпрати към клиента</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        dialog.classList.remove('show');
+        dialog.dataset.requestId = '';
+      };
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-change-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) close();
+      });
+
+      dialog.querySelector('[data-change-send]').addEventListener('click', () => {
+        const requestId = dialog.dataset.requestId;
+        const textarea = dialog.querySelector('#changeRequestText');
+        const error = dialog.querySelector('#changeRequestError');
+        const text = textarea.value.trim();
+
+        if (!text){
+          error.hidden = false;
+          textarea.focus();
+          return;
+        }
+
+        const requests = loadRequests();
+        const req = requests.find(x => x.id === requestId);
+        if (!req) return;
+
+        req.status = 'changes';
+        req.changeRequestText = text;
+        req.changeRequestedAt = new Date().toISOString();
+
+        if (!Array.isArray(req.changeRequestHistory)) req.changeRequestHistory = [];
+        req.changeRequestHistory.push({
+          text,
+          createdAt: req.changeRequestedAt
+        });
+
+        saveRequests(requests);
+        close();
+        openRequest(requestId);
+        toast('Промяната е изпратена към клиента.');
+      });
+    }
+
+    dialog.dataset.requestId = id;
+    const textarea = dialog.querySelector('#changeRequestText');
+    const error = dialog.querySelector('#changeRequestError');
+    textarea.value = r.changeRequestText || '';
+    error.hidden = true;
+    dialog.classList.add('show');
+    setTimeout(() => textarea.focus(), 50);
+  }
+
   async function copyPaymentText(r){
     const text = `Здравейте,\n\nЗаявка ${r.id} е одобрена.\nПакет: ${r.packageLabel || packageLabels[r.package]}\nРекламна визия: ${r.designLabel}\nОбщо за плащане: €${r.total}\n\nПлатежният линк ще бъде добавен тук след свързване на платежния оператор.\n\nKyustendil Screen`;
     try{
@@ -417,7 +515,7 @@
       const r = loadRequests().find(x => x.id === activeRequestId);
       switch(actionBtn.dataset.action){
         case 'approve': updateStatus(activeRequestId,'waiting'); toast('Заявката е одобрена и чака плащане.'); break;
-        case 'changes': updateStatus(activeRequestId,'changes'); toast('Статусът е сменен на „Искана промяна“.'); break;
+        case 'changes': openChangeRequestDialog(activeRequestId); break;
         case 'reject': updateStatus(activeRequestId,'rejected'); toast('Заявката е отказана.'); break;
         case 'mark-paid': updateStatus(activeRequestId,'paid'); toast('Маркирана е като платена.'); break;
         case 'activate': updateStatus(activeRequestId,'active'); toast('Рекламата е маркирана като активна.'); break;
