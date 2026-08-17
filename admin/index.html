@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f8f6f0">
+  <title>Admin — Kyustendil Screen</title>
+  <link rel="icon" href="../assets/favicon.png">
+  <link rel="stylesheet" href="admin.css?v=1">
+</head>
+<body>
+  <div class="demo-login" id="demoLogin">
+    <div class="login-card">
+      <img src="../assets/kyustendil-screen-logo.png" alt="Kyustendil Screen" class="login-logo">
+      <span class="demo-pill">ADMIN v1 · DEMO</span>
+      <h1>Админ платформа</h1>
+      <p>Това е тестовата версия на управлението. Данните се пазят само в браузъра, докато свържем Supabase.</p>
+      <button class="btn btn-primary btn-block" id="enterDemo">Влез в демо режим</button>
+      <p class="login-note">⚠️ Това още не е защитен реален login. Преди официалния старт ще включим Supabase Auth.</p>
+    </div>
+  </div>
+
+  <div class="admin-shell" id="adminShell" hidden>
+    <aside class="sidebar">
+      <a class="admin-brand" href="../index.html">
+        <img src="../assets/kyustendil-screen-logo.png" alt="Kyustendil Screen">
+      </a>
+
+      <nav class="side-nav">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">⌂</span><span>Табло</span>
+        </button>
+        <button class="nav-item" data-view="requests">
+          <span class="nav-icon">▤</span><span>Заявки</span>
+          <span class="nav-badge" data-new-count>0</span>
+        </button>
+        <button class="nav-item" data-view="clients">
+          <span class="nav-icon">◎</span><span>Клиенти</span>
+        </button>
+        <button class="nav-item" data-view="screens">
+          <span class="nav-icon">▣</span><span>Екрани</span>
+        </button>
+        <button class="nav-item" data-view="creatives">
+          <span class="nav-icon">◇</span><span>Материали</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="demo-status">
+          <strong>Demo mode</strong>
+          <small>LocalStorage + IndexedDB</small>
+        </div>
+        <button class="nav-item" id="exitDemo"><span class="nav-icon">↪</span><span>Изход</span></button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Меню">☰</button>
+        <div>
+          <p class="eyebrow">KYUSTENDIL SCREEN</p>
+          <h2 id="viewTitle">Табло</h2>
+        </div>
+        <div class="top-actions">
+          <a class="btn btn-light" href="../reklamiray.html" target="_blank">+ Тестова заявка</a>
+          <button class="avatar" title="Администратор">KS</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- Dashboard -->
+        <section class="view active" data-view-panel="dashboard">
+          <div class="hero-admin">
+            <div>
+              <span class="section-kicker">ОБЗОР</span>
+              <h1>Заявки и кампании на едно място.</h1>
+              <p>Следи какво чака преглед, плащане и пускане на екраните.</p>
+            </div>
+            <button class="btn btn-gold" id="seedDemo">Зареди примерни заявки</button>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card stat-new">
+              <div class="stat-top"><span>Нови заявки</span><span class="stat-dot"></span></div>
+              <strong data-stat="new">0</strong>
+              <small>чакат преглед</small>
+            </article>
+            <article class="stat-card stat-waiting">
+              <div class="stat-top"><span>Чакат плащане</span><span class="stat-dot"></span></div>
+              <strong data-stat="waiting">0</strong>
+              <small>одобрени заявки</small>
+            </article>
+            <article class="stat-card stat-paid">
+              <div class="stat-top"><span>Платени</span><span class="stat-dot"></span></div>
+              <strong data-stat="paid">0</strong>
+              <small>за планиране</small>
+            </article>
+            <article class="stat-card stat-active">
+              <div class="stat-top"><span>Активни реклами</span><span class="stat-dot"></span></div>
+              <strong data-stat="active">0</strong>
+              <small>в момента</small>
+            </article>
+            <article class="stat-card stat-revenue">
+              <div class="stat-top"><span>Платен приход</span><span class="stat-dot"></span></div>
+              <strong data-stat="revenue">€0</strong>
+              <small>в demo данните</small>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <div><span class="section-kicker">ПОСЛЕДНИ</span><h3>Нови заявки</h3></div>
+                <button class="text-btn" data-go-view="requests">Виж всички →</button>
+              </div>
+              <div id="recentRequests" class="compact-list empty-state">
+                <p>Все още няма заявки.</p>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div><span class="section-kicker">ПОТОК</span><h3>Какво следва</h3></div>
+              </div>
+              <div class="pipeline">
+                <div class="pipe-step"><span>1</span><div><strong>Нова</strong><small>Преглед на заявката</small></div></div>
+                <div class="pipe-line"></div>
+                <div class="pipe-step"><span>2</span><div><strong>Одобрена</strong><small>Чака плащане</small></div></div>
+                <div class="pipe-line"></div>
+                <div class="pipe-step"><span>3</span><div><strong>Платена</strong><small>Планирай екрани</small></div></div>
+                <div class="pipe-line"></div>
+                <div class="pipe-step"><span>4</span><div><strong>Активна</strong><small>Рекламата се излъчва</small></div></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- Requests -->
+        <section class="view" data-view-panel="requests">
+          <div class="view-head">
+            <div>
+              <span class="section-kicker">УПРАВЛЕНИЕ</span>
+              <h1>Заявки</h1>
+              <p>Преглеждай материалите, одобрявай и следи плащането.</p>
+            </div>
+          </div>
+
+          <div class="toolbar panel">
+            <div class="search-box">
+              <span>⌕</span>
+              <input id="requestSearch" type="search" placeholder="Търси по номер, фирма, име или email">
+            </div>
+            <select id="statusFilter">
+              <option value="all">Всички статуси</option>
+              <option value="new">Нови</option>
+              <option value="changes">Искана промяна</option>
+              <option value="waiting">Чакат плащане</option>
+              <option value="paid">Платени</option>
+              <option value="active">Активни</option>
+              <option value="done">Приключени</option>
+              <option value="rejected">Отказани</option>
+            </select>
+          </div>
+
+          <div class="panel table-panel">
+            <div class="table-wrap">
+              <table class="requests-table">
+                <thead>
+                  <tr>
+                    <th>Заявка</th>
+                    <th>Клиент</th>
+                    <th>Пакет</th>
+                    <th>Сума</th>
+                    <th>Статус</th>
+                    <th>Дата</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="requestsTable"></tbody>
+              </table>
+            </div>
+            <div class="table-empty" id="requestsEmpty" hidden>
+              <strong>Няма намерени заявки</strong>
+              <p>Промени филтъра или изпрати тестова заявка от публичната форма.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Clients -->
+        <section class="view" data-view-panel="clients">
+          <div class="view-head">
+            <div><span class="section-kicker">БАЗА</span><h1>Клиенти</h1><p>Автоматично извлечени от подадените заявки.</p></div>
+          </div>
+          <div id="clientsGrid" class="clients-grid"></div>
+        </section>
+
+        <!-- Screens -->
+        <section class="view" data-view-panel="screens">
+          <div class="view-head">
+            <div><span class="section-kicker">МРЕЖА</span><h1>Екрани</h1><p>Първите локации. Реалната връзка със signage системата ще добавим на следващ етап.</p></div>
+          </div>
+          <div class="screens-grid">
+            <article class="screen-card panel">
+              <div class="screen-preview"><div class="fake-tv"><span>ТРАУРНА<br>АГЕНЦИЯ</span></div></div>
+              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Траурна агенция</h3><p>Пилотен екран · адресът ще се добави по-късно.</p></div>
+            </article>
+            <article class="screen-card panel">
+              <div class="screen-preview"><div class="fake-tv"><span>АПТЕКА</span></div></div>
+              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Аптека</h3><p>Планирана локация.</p></div>
+            </article>
+            <article class="screen-card panel">
+              <div class="screen-preview"><div class="fake-tv"><span>ЗАВЕДЕНИЕ</span></div></div>
+              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Заведение</h3><p>Планирана локация.</p></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Creatives -->
+        <section class="view" data-view-panel="creatives">
+          <div class="view-head">
+            <div><span class="section-kicker">ФАЙЛОВЕ</span><h1>Материали</h1><p>Качените файлове от заявките. В demo режима са достъпни само в същия браузър.</p></div>
+          </div>
+          <div id="creativeGrid" class="creative-grid"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Request drawer -->
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="request-drawer" id="requestDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <span class="section-kicker">ЗАЯВКА</span>
+        <h2 id="drawerRequestId">KS-0000</h2>
+      </div>
+      <button class="icon-btn" id="closeDrawer" aria-label="Затвори">×</button>
+    </div>
+    <div id="drawerContent" class="drawer-content"></div>
+    <div class="drawer-actions" id="drawerActions"></div>
+  </aside>
+
+  <div class="toast" id="adminToast"></div>
+  <script src="admin.js?v=1"></script>
+</body>
+</html>
