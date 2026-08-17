@@ -78,16 +78,23 @@
     });
   }
 
-  async function downloadFile(key,name){
-    if(!key){ toast('Този demo файл няма локално съдържание.'); return; }
+  async function getStoredFile(key){
+    if(!key) return null;
     try{
       const db=await openDB();
-      const record=await new Promise((resolve,reject)=>{
+      return await new Promise((resolve,reject)=>{
         const tx=db.transaction(FILE_STORE,'readonly');
         const req=tx.objectStore(FILE_STORE).get(key);
         req.onsuccess=()=>resolve(req.result||null);
         req.onerror=()=>reject(req.error);
       });
+    }catch(e){ return null; }
+  }
+
+  async function downloadFile(key,name){
+    if(!key){ toast('Този demo файл няма локално съдържание.'); return; }
+    try{
+      const record=await getStoredFile(key);
       if(!record?.blob){ toast('Файлът не е наличен на това устройство.'); return; }
       const url=URL.createObjectURL(record.blob);
       const a=document.createElement('a');
@@ -180,7 +187,9 @@
       const st=clientStatus[r.status]||{label:r.status,cls:''};
       const pkg=packageNames[r.package]||r.package||'—';
       const action = r.status==='waiting'
-        ? `<div class="payment-alert">● Заявката е одобрена. След свързване на плащанията тук ще се появи бутон „Плати €${Number(r.total||0)}“.</div>`
+        ? (r.designType !== 'ready' && r.creativeApprovalStatus !== 'approved'
+          ? `<div class="payment-alert creative-client-alert"><div><strong>● ${r.finalCreative ? 'Визията чака твоето решение' : 'Подготвяме рекламната визия'}</strong><span>${r.finalCreative ? 'Отвори заявката, прегледай файла и го одобри или поискай корекция.' : 'Когато е готова, ще се появи тук за преглед.'}</span></div></div>`
+          : `<div class="payment-alert">● Заявката е готова за плащане. След свързване на платежния оператор тук ще се появи бутон „Плати €${Number(r.total||0)}“.</div>`)
         : r.status==='changes'
         ? `<div class="payment-alert change-alert"><div><strong>● Нужна е промяна</strong><span>${esc(r.changeRequestText || 'Отвори детайлите на заявката, за да видиш какво е необходимо.')}</span></div></div>`
         : r.status==='active' && r.expiresAt
@@ -234,7 +243,10 @@
 
   function paymentBox(r){
     if(r.status==='waiting'){
-      return `<div class="action-box"><h3>Плащане: €${Number(r.total||0)}</h3><p>Заявката е одобрена. След като свържем платежния оператор, тук ще имаш директен бутон за плащане.</p><button class="btn btn-blue payment-btn" disabled>Плати €${Number(r.total||0)}</button></div>`;
+      if(r.designType !== 'ready' && r.creativeApprovalStatus !== 'approved'){
+        return '';
+      }
+      return `<div class="action-box"><h3>Плащане: €${Number(r.total||0)}</h3><p>Заявката и рекламната визия са готови. След като свържем платежния оператор, тук ще имаш директен бутон за плащане.</p><button class="btn btn-blue payment-btn" disabled>Плати €${Number(r.total||0)}</button></div>`;
     }
     if(r.status==='paid') return `<div class="action-box"><h3>Плащането е получено ✓</h3><p>Подготвяме рекламата за планиране и излъчване.</p></div>`;
     if(r.status==='active') return `<div class="action-box"><h3>Рекламата се излъчва</h3><p>След реалното свързване на екраните тук ще показваме и конкретните локации и период.</p></div>`;
@@ -306,11 +318,144 @@
       ${paymentBox(r)}
       <div class="detail-section" style="margin-top:24px">
         <h4>Визия за одобрение</h4>
-        <div class="detail-box">
-          <span>Следващ етап</span>
-          <strong>${r.designType==='ready' ? 'Използва се готовият файл, който си изпратил.' : 'Когато подготвим визията, тук ще я виждаш и ще можеш да я одобриш или да поискаш корекция.'}</strong>
-        </div>
+        ${r.designType==='ready' ? `
+          <div class="detail-box">
+            <span>Готова реклама</span>
+            <strong>Използва се файлът, който си изпратил.</strong>
+          </div>` :
+          r.finalCreative ? `
+          <div class="final-creative-client">
+            <div id="clientFinalCreativePreview" class="creative-preview-box">
+              <div class="creative-preview-loading">Зареждане на визията…</div>
+            </div>
+            <div class="file-chip">
+              <span>${String(r.finalCreative.type||'').startsWith('video/')?'▶':'▧'}</span>
+              <div><strong>${esc(r.finalCreative.name)}</strong><small>${esc(r.finalCreative.type||'файл')}</small></div>
+              <button class="file-download" data-client-download="${esc(r.finalCreative.key)}" data-client-download-name="${esc(r.finalCreative.name)}">Свали</button>
+            </div>
+
+            ${r.creativeApprovalStatus === 'approved' ? `
+              <div class="creative-decision approved"><strong>✓ Визията е одобрена</strong><span>Можем да продължим към плащане.</span></div>
+            ` : r.creativeApprovalStatus === 'correction' ? `
+              <div class="creative-decision correction"><strong>Поискал си корекция</strong><span>${esc(r.creativeCorrectionText || '')}</span></div>
+            ` : `
+              <div class="creative-decision-actions">
+                <button class="btn btn-blue" data-creative-approve="${esc(r.id)}">Одобрявам визията</button>
+                <button class="btn client-correction-btn" data-creative-correction="${esc(r.id)}">Искам корекция</button>
+              </div>
+            `}
+          </div>` :
+          `<div class="detail-box">
+            <span>Подготовка</span>
+            <strong>Визията още се подготвя. Когато бъде качена, ще я видиш тук.</strong>
+          </div>`}
       </div>`;
+  }
+
+  let finalCreativeObjectUrl = null;
+
+  async function renderFinalCreativePreview(r){
+    const box=document.getElementById('clientFinalCreativePreview');
+    if(!box || !r?.finalCreative?.key) return;
+
+    if(finalCreativeObjectUrl){
+      URL.revokeObjectURL(finalCreativeObjectUrl);
+      finalCreativeObjectUrl=null;
+    }
+
+    const record=await getStoredFile(r.finalCreative.key);
+    if(!record?.blob){
+      box.innerHTML='<div class="creative-preview-missing">Файлът е наличен само на устройството, от което е качен в demo режима.</div>';
+      return;
+    }
+
+    finalCreativeObjectUrl=URL.createObjectURL(record.blob);
+    if(String(record.type||'').startsWith('video/')){
+      box.innerHTML=`<video src="${finalCreativeObjectUrl}" controls muted playsinline></video>`;
+    }else{
+      box.innerHTML=`<img src="${finalCreativeObjectUrl}" alt="Рекламна визия за одобрение">`;
+    }
+  }
+
+  function approveCreative(id){
+    const requests=loadRequests();
+    const r=requests.find(x=>x.id===id);
+    if(!r || !r.finalCreative) return;
+
+    r.creativeApprovalStatus='approved';
+    r.creativeApprovedAt=new Date().toISOString();
+    r.creativeCorrectionText=null;
+    r.creativeCorrectionRequestedAt=null;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(requests));
+    render();
+    openModal(id);
+    toast('Визията е одобрена.');
+  }
+
+  function openCreativeCorrectionDialog(id){
+    let dialog=document.getElementById('clientCreativeCorrectionDialog');
+    if(!dialog){
+      dialog=document.createElement('div');
+      dialog.id='clientCreativeCorrectionDialog';
+      dialog.className='client-dialog-backdrop';
+      dialog.innerHTML=`
+        <section class="client-dialog" role="dialog" aria-modal="true">
+          <div class="client-dialog-head">
+            <div>
+              <span class="eyebrow">КОРЕКЦИЯ</span>
+              <h3>Какво искаш да променим?</h3>
+            </div>
+            <button class="close-btn" type="button" data-client-dialog-close>×</button>
+          </div>
+          <p>Напиши свободно каква корекция искаш по визията.</p>
+          <textarea id="clientCreativeCorrectionText" rows="5" placeholder="Например: Увеличете телефона и сменете текста на промоцията."></textarea>
+          <div class="client-dialog-error" id="clientCreativeCorrectionError" hidden>Напиши каква корекция искаш.</div>
+          <div class="client-dialog-actions">
+            <button class="btn client-correction-btn" type="button" data-client-dialog-close>Отказ</button>
+            <button class="btn btn-blue" type="button" data-client-correction-send>Изпрати корекцията</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close=()=>{
+        dialog.classList.remove('show');
+        dialog.dataset.requestId='';
+      };
+      dialog.querySelectorAll('[data-client-dialog-close]').forEach(b=>b.addEventListener('click',close));
+      dialog.addEventListener('click',e=>{if(e.target===dialog)close();});
+
+      dialog.querySelector('[data-client-correction-send]').addEventListener('click',()=>{
+        const text=dialog.querySelector('#clientCreativeCorrectionText').value.trim();
+        const error=dialog.querySelector('#clientCreativeCorrectionError');
+        if(!text){
+          error.hidden=false;
+          return;
+        }
+        const requestId=dialog.dataset.requestId;
+        const requests=loadRequests();
+        const r=requests.find(x=>x.id===requestId);
+        if(!r) return;
+
+        r.creativeApprovalStatus='correction';
+        r.creativeCorrectionText=text;
+        r.creativeCorrectionRequestedAt=new Date().toISOString();
+        r.creativeApprovedAt=null;
+        if(!Array.isArray(r.creativeCorrectionHistory)) r.creativeCorrectionHistory=[];
+        r.creativeCorrectionHistory.push({text,createdAt:r.creativeCorrectionRequestedAt});
+
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(requests));
+        close();
+        render();
+        openModal(requestId);
+        toast('Корекцията е изпратена.');
+      });
+    }
+
+    dialog.dataset.requestId=id;
+    dialog.querySelector('#clientCreativeCorrectionText').value='';
+    dialog.querySelector('#clientCreativeCorrectionError').hidden=true;
+    dialog.classList.add('show');
+    setTimeout(()=>dialog.querySelector('#clientCreativeCorrectionText').focus(),50);
   }
 
   function openModal(id){
@@ -321,11 +466,16 @@
     backdrop.hidden=false;
     requestAnimationFrame(()=>modal.classList.add('open'));
     modal.setAttribute('aria-hidden','false');
+    renderFinalCreativePreview(r);
   }
 
   function closeModal(){
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden','true');
+    if(finalCreativeObjectUrl){
+      URL.revokeObjectURL(finalCreativeObjectUrl);
+      finalCreativeObjectUrl=null;
+    }
     setTimeout(()=>backdrop.hidden=true,220);
   }
 
@@ -334,6 +484,12 @@
     if(req) openModal(req.dataset.clientRequest);
     const dl=e.target.closest('[data-client-download]');
     if(dl) await downloadFile(dl.dataset.clientDownload,dl.dataset.clientDownloadName);
+
+    const approve=e.target.closest('[data-creative-approve]');
+    if(approve) approveCreative(approve.dataset.creativeApprove);
+
+    const correction=e.target.closest('[data-creative-correction]');
+    if(correction) openCreativeCorrectionDialog(correction.dataset.creativeCorrection);
   });
 
   document.getElementById('closeClientModal').addEventListener('click',closeModal);
