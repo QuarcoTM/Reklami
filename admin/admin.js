@@ -154,6 +154,16 @@
     });
   }
 
+  async function putStoredFile(record){
+    const db = await openDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE, 'readwrite');
+      tx.objectStore(FILE_STORE).put(record);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async function getStoredFile(key){
     if (!key) return null;
     try{
@@ -654,6 +664,31 @@
             ${r.creativeContact ? `<div class="info-box"><span>Контакт за рекламата</span><strong>${esc(r.creativeContact)}</strong></div>`:''}
           </div>
         </div>` : ''}
+      ${r.designType !== 'ready' ? `
+      <div class="drawer-section">
+        <h4>Готова визия за клиента</h4>
+        ${r.finalCreative ? `
+          <div class="final-creative-admin">
+            <div class="file-chip">
+              <span>${String(r.finalCreative.type||'').startsWith('video/')?'▶':'▧'}</span>
+              <div>
+                <strong>${esc(r.finalCreative.name)}</strong>
+                <small>${esc(r.finalCreative.type||'файл')} · ${formatBytes(r.finalCreative.size||0)}</small>
+              </div>
+              <button class="download-link" data-download-key="${esc(r.finalCreative.key)}" data-download-name="${esc(r.finalCreative.name)}">Свали</button>
+            </div>
+            <div class="creative-review-status ${esc(r.creativeApprovalStatus || 'pending')}">
+              <strong>${
+                r.creativeApprovalStatus === 'approved' ? '✓ Одобрена от клиента' :
+                r.creativeApprovalStatus === 'correction' ? '⚠ Клиентът иска корекция' :
+                '● Чака одобрение от клиента'
+              }</strong>
+              ${r.creativeApprovalStatus === 'approved' && r.creativeApprovedAt ? `<span>${formatDate(r.creativeApprovedAt)}</span>` : ''}
+              ${r.creativeApprovalStatus === 'correction' && r.creativeCorrectionText ? `<span>${esc(r.creativeCorrectionText)}</span>` : ''}
+            </div>
+          </div>
+        ` : `<div class="creative-review-empty"><strong>Все още няма качена готова визия.</strong><span>Качи JPG, PNG или MP4, за да я изпратиш за клиентско одобрение.</span></div>`}
+      </div>` : ''}
       <div class="drawer-section">
         <h4>Материали</h4>
         ${files.length ? files.map(f => `
@@ -684,9 +719,17 @@
     if (r.status === 'changes') return `
       <button class="btn btn-success" data-action="approve">Одобри</button>
       <button class="btn btn-danger" data-action="reject">Откажи</button>`;
-    if (r.status === 'waiting') return `
-      <button class="btn btn-primary" data-action="copy-payment">Копирай платежен текст</button>
-      <button class="btn btn-success" data-action="mark-paid">Маркирай платено</button>`;
+    if (r.status === 'waiting') {
+      if (r.designType !== 'ready' && r.creativeApprovalStatus !== 'approved') {
+        return `
+          <button class="btn btn-primary" data-action="upload-creative">${r.finalCreative ? 'Качи коригирана визия' : 'Качи визия за одобрение'}</button>
+          ${r.finalCreative && r.creativeApprovalStatus === 'pending' ? '<button class="btn btn-light" disabled>Чака клиентско одобрение</button>' : ''}
+          ${r.finalCreative && r.creativeApprovalStatus === 'correction' ? '<button class="btn btn-warning" disabled>Искана е корекция</button>' : ''}`;
+      }
+      return `
+        <button class="btn btn-primary" data-action="copy-payment">Копирай платежен текст</button>
+        <button class="btn btn-success" data-action="mark-paid">Маркирай платено</button>`;
+    }
     if (r.status === 'paid') return `
       <button class="btn btn-primary" data-action="activate">Активирай рекламата</button>`;
     if (r.status === 'active') return `
@@ -783,6 +826,132 @@
 
     saveRequests(requests);
     openRequest(id, false);
+  }
+
+  function openCreativeUploadDialog(id){
+    const r = loadRequests().find(x => x.id === id);
+    if (!r) return;
+
+    let dialog = document.getElementById('creativeUploadDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'creativeUploadDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog creative-upload-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ГОТОВА ВИЗИЯ</span>
+              <h3>Качи файла за одобрение</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+
+          <p class="change-dialog-help">
+            Клиентът ще види този файл в профила си и ще избере „Одобрявам визията“ или „Искам корекция“.
+          </p>
+
+          <label class="creative-upload-drop">
+            <input id="creativeUploadFile" type="file" accept="image/jpeg,image/png,video/mp4">
+            <span class="creative-upload-icon">⇧</span>
+            <strong>Избери JPG, PNG или MP4</strong>
+            <small>Максимум 25 MB</small>
+          </label>
+
+          <div class="selected-creative-file" id="selectedCreativeFile">Няма избран файл</div>
+          <div class="change-dialog-error" id="creativeUploadError" hidden></div>
+
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-creative-cancel>Отказ</button>
+            <button type="button" class="btn btn-primary" data-creative-send>Изпрати за одобрение</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        dialog.classList.remove('show');
+        dialog.dataset.requestId = '';
+        dialog.querySelector('#creativeUploadFile').value = '';
+        dialog.querySelector('#selectedCreativeFile').textContent = 'Няма избран файл';
+        dialog.querySelector('#creativeUploadError').hidden = true;
+      };
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-creative-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+
+      dialog.querySelector('#creativeUploadFile').addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        dialog.querySelector('#selectedCreativeFile').textContent =
+          file ? `${file.name} · ${formatBytes(file.size)}` : 'Няма избран файл';
+        dialog.querySelector('#creativeUploadError').hidden = true;
+      });
+
+      dialog.querySelector('[data-creative-send]').addEventListener('click', async () => {
+        const file = dialog.querySelector('#creativeUploadFile').files?.[0];
+        const error = dialog.querySelector('#creativeUploadError');
+        const requestId = dialog.dataset.requestId;
+
+        if (!file){
+          error.textContent = 'Избери файл.';
+          error.hidden = false;
+          return;
+        }
+        if (!['image/jpeg','image/png','video/mp4'].includes(file.type)){
+          error.textContent = 'Разрешени са само JPG, PNG и MP4.';
+          error.hidden = false;
+          return;
+        }
+        if (file.size > 25 * 1024 * 1024){
+          error.textContent = 'Файлът е по-голям от 25 MB.';
+          error.hidden = false;
+          return;
+        }
+
+        const key = `final-${requestId}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        try{
+          await putStoredFile({
+            key,
+            blob:file,
+            name:file.name,
+            type:file.type,
+            size:file.size,
+            createdAt:new Date().toISOString()
+          });
+
+          const requests = loadRequests();
+          const req = requests.find(x => x.id === requestId);
+          if (!req) return;
+
+          if (!Array.isArray(req.finalCreativeHistory)) req.finalCreativeHistory = [];
+          if (req.finalCreative) req.finalCreativeHistory.push({...req.finalCreative});
+
+          req.finalCreative = {
+            key,
+            name:file.name,
+            type:file.type,
+            size:file.size,
+            uploadedAt:new Date().toISOString()
+          };
+          req.creativeApprovalStatus = 'pending';
+          req.creativeCorrectionText = null;
+          req.creativeCorrectionRequestedAt = null;
+          req.creativeApprovedAt = null;
+
+          saveRequests(requests);
+          close();
+          openRequest(requestId, false);
+          toast('Визията е изпратена за клиентско одобрение.');
+        }catch(err){
+          console.error(err);
+          error.textContent = 'Файлът не можа да бъде записан в demo режима.';
+          error.hidden = false;
+        }
+      });
+    }
+
+    dialog.dataset.requestId = id;
+    dialog.classList.add('show');
   }
 
   function openChangeRequestDialog(id){
@@ -897,7 +1066,15 @@
     if (actionBtn && activeRequestId){
       const r = loadRequests().find(x => x.id === activeRequestId);
       switch(actionBtn.dataset.action){
-        case 'approve': updateStatus(activeRequestId,'waiting'); toast('Заявката е одобрена и чака плащане.'); break;
+        case 'approve': {
+          updateStatus(activeRequestId,'waiting');
+          const approved = loadRequests().find(x => x.id === activeRequestId);
+          toast(approved?.designType === 'ready'
+            ? 'Заявката е одобрена и чака плащане.'
+            : 'Заявката е одобрена. Следва качване на визия за клиентско одобрение.');
+          break;
+        }
+        case 'upload-creative': openCreativeUploadDialog(activeRequestId); break;
         case 'changes': openChangeRequestDialog(activeRequestId); break;
         case 'reject': updateStatus(activeRequestId,'rejected'); toast('Заявката е отказана.'); break;
         case 'mark-paid': updateStatus(activeRequestId,'paid'); toast('Маркирана е като платена.'); break;

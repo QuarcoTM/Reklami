@@ -489,3 +489,79 @@ button{cursor:pointer}
     grid-template-columns:1fr;
   }
 }
+
+
+/* Final creative approval v2.1 */
+.creative-review-empty{
+  padding:14px;
+  border:1px dashed #cfc8bb;
+  border-radius:14px;
+  background:#faf8f3;
+}
+.creative-review-empty strong,
+.creative-review-empty span{
+  display:block;
+}
+.creative-review-empty span{
+  color:var(--muted);
+  margin-top:4px;
+  font-size:13px;
+}
+.creative-review-status{
+  margin-top:9px;
+  padding:11px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#f7f7f7;
+}
+.creative-review-status strong,
+.creative-review-status span{
+  display:block;
+}
+.creative-review-status span{
+  margin-top:4px;
+  color:var(--muted);
+  line-height:1.45;
+}
+.creative-review-status.pending{
+  background:#eef3ff;
+  border-color:#d8e3ff;
+  color:#244d9d;
+}
+.creative-review-status.approved{
+  background:#eaf7f1;
+  border-color:#c9eadc;
+  color:#167a54;
+}
+.creative-review-status.correction{
+  background:#fff4e5;
+  border-color:#efd2a6;
+  color:#93601a;
+}
+.creative-upload-drop{
+  display:grid;
+  place-items:center;
+  gap:4px;
+  text-align:center;
+  padding:24px 16px;
+  border:1.5px dashed #c9c1b3;
+  border-radius:16px;
+  background:#faf8f3;
+  cursor:pointer;
+}
+.creative-upload-drop input{display:none}
+.creative-upload-icon{
+  font-size:28px;
+  color:var(--blue);
+  font-weight:950;
+}
+.creative-upload-drop small{color:var(--muted)}
+.selected-creative-file{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:11px;
+  background:#f3f5fa;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:800;
+}
