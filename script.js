@@ -34,6 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
     locationsInput.value = locationParam;
   }
 
+  const packageParam = (params.get('package') || '').toLowerCase();
+  const packageSelect = document.querySelector('select[name="package"]');
+  if (packageSelect && ['single', 'local', 'city'].includes(packageParam)) {
+    packageSelect.value = packageParam;
+    packageSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   const toast = document.querySelector('.toast');
   function showToast(message){
     if(!toast) return;
