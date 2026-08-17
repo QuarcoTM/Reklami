@@ -246,3 +246,23 @@ Demo входът не е защита. След Supabase:
 Добавени са линкове във footer-а, формата „Пусни реклама“ и формата „Стани партньор“.
 
 Важно: юридическите данни на администратора, реалният privacy email и списъкът на реалните инфраструктурни доставчици трябва да бъдат финализирани преди официален публичен старт.
+
+
+## v1.9 — SEO + Social Share
+Добавено:
+- оптимизирани `<title>` и meta descriptions за публичните страници;
+- canonical URL за GitHub Pages адреса `https://quarcotm.github.io/Reklami/`;
+- Open Graph meta за Facebook / Messenger / Viber;
+- Twitter/X large image card;
+- `assets/share-preview.png` — 1200×630, използва точно заключеното лого;
+- favicon 32×32, 192×192 и Apple Touch Icon 180×180;
+- `site.webmanifest`;
+- `sitemap.xml`;
+- `robots.txt`;
+- `noindex` за `/admin/`, `/profil/` и `zayavka-poluchena.html`;
+- WebSite JSON-LD на началната страница.
+
+### При собствен домейн
+Когато сайтът мине на собствен домейн, абсолютният base URL в canonical/Open Graph, `robots.txt` и `sitemap.xml` трябва да се смени от:
+`https://quarcotm.github.io/Reklami`
+към реалния домейн. Това е една обща техническа промяна.

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /Reklami/admin/
+Disallow: /Reklami/profil/
+Disallow: /Reklami/zayavka-poluchena.html
+
+Sitemap: https://quarcotm.github.io/Reklami/sitemap.xml
