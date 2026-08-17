@@ -79,6 +79,53 @@ document.addEventListener('DOMContentLoaded', () => {
   designRadios.forEach(radio => radio.addEventListener('change', updateDesignPanel));
   updateDesignPanel();
 
+
+  // v4.8: live price summary. Payment happens only after manual approval.
+  const summaryPackage = document.querySelector('[data-summary-package]');
+  const summaryDesign = document.querySelector('[data-summary-design]');
+  const summaryTotal = document.querySelector('[data-summary-total]');
+  const summaryNote = document.querySelector('[data-summary-note]');
+
+  const packageData = {
+    single: { label: 'SINGLE — €25 / месец', price: 25, from: false },
+    local: { label: 'LOCAL — €49 / месец', price: 49, from: false },
+    city: { label: 'CITY — от €69 / месец', price: 69, from: true }
+  };
+  const designData = {
+    ready: { label: 'Готова реклама — €0', price: 0 },
+    static: { label: 'Статична визия — +€3 еднократно', price: 3 },
+    video: { label: 'Кратко видео — +€10 еднократно', price: 10 }
+  };
+
+  function updateOrderSummary(){
+    if (!summaryPackage || !summaryDesign || !summaryTotal) return;
+    const packageValue = packageSelect ? packageSelect.value : '';
+    const checkedDesign = document.querySelector('input[name="design"][data-design-type]:checked');
+    const pkg = packageData[packageValue];
+    const design = checkedDesign ? designData[checkedDesign.dataset.designType] : null;
+
+    summaryPackage.textContent = pkg ? pkg.label : 'Не е избран';
+    summaryDesign.textContent = design ? design.label : 'Не е избрана';
+
+    if (!pkg || !design) {
+      summaryTotal.textContent = '—';
+      if (summaryNote) summaryNote.textContent = 'Избери пакет и рекламна визия, за да видиш ориентировъчната сума.';
+      return;
+    }
+
+    const total = pkg.price + design.price;
+    summaryTotal.textContent = `${pkg.from ? 'от ' : ''}€${total}`;
+    if (summaryNote) {
+      summaryNote.textContent = pkg.from
+        ? 'CITY е с начална цена. Точният брой екрани и крайната сума се потвърждават при одобрението.'
+        : 'Тази сума е ориентировъчна. Крайната цена се потвърждава преди да получиш линк за плащане.';
+    }
+  }
+
+  if (packageSelect) packageSelect.addEventListener('change', updateOrderSummary);
+  designRadios.forEach(radio => radio.addEventListener('change', updateOrderSummary));
+  updateOrderSummary();
+
   document.querySelectorAll('.real-file-input').forEach(input => {
     input.addEventListener('change', () => {
       const output = document.querySelector(`[data-file-output="${input.id}"]`);
@@ -106,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
-      showToast('Формата е готова за свързване с реален email/бекенд преди публичния старт.');
+      showToast('Заявката е готова за изпращане за одобрение. Плащане няма да бъде поискано на този етап.');
     });
   });
 });

@@ -29,7 +29,7 @@
   </div>
 </header>
 <main>
-<section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати запитване</h1><p>Формата е подготвена за GitHub Pages. Преди публичния старт трябва само да я свържем с реален email или форма услуга.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
+<section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати за одобрение</h1><p>Изпращаш заявката без плащане. Преглеждаме рекламата, потвърждаваме крайната цена и чак след одобрение получаваш линк за плащане.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
 <section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form enctype="multipart/form-data"><h2>Заявка за реклама</h2><p class="required-note"><span>*</span> – задължително поле</p>
 <div class="field"><label>Фирма / бранд <span class="required-star">*</span></label><input required name="company" placeholder="Име на бизнеса"></div>
 <div class="field"><label>Лице за контакт <span class="required-star">*</span></label><input required name="name" placeholder="Име"></div>
@@ -122,8 +122,41 @@
     </div>
 
     <div class="field"><label>Бележка <span class="optional-label">по желание</span></label><textarea name="message" placeholder="Опиши офертата, периода или допълнителен въпрос..."></textarea></div>
-    <p class="form-help"><strong>GitHub preview:</strong> файловете вече могат да се избират и формата ги валидира. За реалното им изпращане трябва да свържем формата с endpoint преди публичния старт.</p>
-    <button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack">
+
+    <section class="approval-box" aria-label="Плащане след одобрение">
+      <div class="approval-icon">✓</div>
+      <div>
+        <strong>На този етап не плащаш нищо.</strong>
+        <p>След като прегледаме заявката и одобрим рекламата, ще получиш потвърждение с крайната цена и линк за плащане.</p>
+      </div>
+    </section>
+
+    <section class="order-summary" aria-live="polite">
+      <div class="order-summary-head">
+        <div>
+          <span class="badge badge-blue">Твоята заявка</span>
+          <h3>Обобщение преди изпращане</h3>
+        </div>
+        <span class="summary-status">Плащане след одобрение</span>
+      </div>
+      <div class="summary-row"><span>Пакет</span><strong data-summary-package>Не е избран</strong></div>
+      <div class="summary-row"><span>Рекламна визия</span><strong data-summary-design>Не е избрана</strong></div>
+      <div class="summary-total"><span>Ориентировъчно общо след одобрение</span><strong data-summary-total>—</strong></div>
+      <p class="summary-note" data-summary-note>Крайната цена се потвърждава след преглед на заявката.</p>
+    </section>
+
+    <p class="form-help"><strong>Важно:</strong> бутонът по-долу изпраща заявката за преглед. Плащане се извършва само след одобрение.</p>
+    <button class="btn btn-blue approval-submit" type="submit">Изпрати за одобрение</button></form><div class="side-stack">
+  <aside class="card info-card payment-flow-card">
+    <span class="badge badge-blue">Плащане</span>
+    <h3>Плащаш едва след одобрение</h3>
+    <div class="payment-steps">
+      <div><span>1</span><p>Изпращаш заявката и файловете.</p></div>
+      <div><span>2</span><p>Преглеждаме рекламата и потвърждаваме цената.</p></div>
+      <div><span>3</span><p>Получаваш линк за плащане.</p></div>
+      <div><span>4</span><p>След плащане рекламата влиза за излъчване.</p></div>
+    </div>
+  </aside>
   <aside class="card info-card">
     <span class="badge badge-blue">Изработка на визия</span>
     <h3>Нямаш готова реклама?</h3>
