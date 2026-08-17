@@ -224,3 +224,39 @@ button{cursor:pointer}
   margin-top:9px;
   color:var(--muted);
 }
+
+
+/* Campaign dates v1.6 */
+.active-period-alert{
+  background:#eef3ff;
+  color:#31518d;
+}
+.active-period-alert strong,
+.active-period-alert span{
+  display:block;
+}
+.active-period-alert span{
+  margin-top:4px;
+  font-weight:700;
+}
+.client-period-note{
+  margin-top:10px;
+  padding:12px 13px;
+  border-radius:13px;
+  background:var(--blue-soft);
+  border:1px solid #dbe5ff;
+}
+.client-period-note strong,
+.client-period-note span{
+  display:block;
+}
+.client-period-note span{
+  color:var(--muted);
+  margin-top:3px;
+  font-size:13px;
+  line-height:1.4;
+}
+.client-period-note.expired{
+  background:#fff0f0;
+  border-color:#efc8c8;
+}

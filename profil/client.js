@@ -28,6 +28,7 @@
   }
 
   function ownRequests(){
+    clientSyncLifecycle();
     const email = (sessionStorage.getItem(SESSION_KEY) || '').trim().toLowerCase();
     return loadRequests()
       .filter(r => String(r.email || '').trim().toLowerCase() === email)
@@ -36,6 +37,33 @@
 
   function formatDate(v){
     return new Intl.DateTimeFormat('bg-BG',{day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(v));
+  }
+
+  function clientSyncLifecycle(){
+    const requests = loadRequests();
+    let changed = false;
+    const now = Date.now();
+
+    requests.forEach(r => {
+      if (r.status === 'active' && r.expiresAt && new Date(r.expiresAt).getTime() <= now) {
+        r.status = 'done';
+        r.completedAt = new Date().toISOString();
+        r.completionReason = 'expired';
+        changed = true;
+      }
+    });
+
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+  }
+
+  function clientTimeLeft(r){
+    if (!r?.expiresAt || r.status !== 'active') return '';
+    const ms = new Date(r.expiresAt).getTime() - Date.now();
+    if (ms <= 0) return 'Кампанията е изтекла.';
+    const hours = Math.ceil(ms / 3600000);
+    if (hours <= 24) return hours === 1 ? 'Остава 1 час' : `Остават ${hours} часа`;
+    const days = Math.ceil(ms / 86400000);
+    return days === 1 ? 'Остава 1 ден' : `Остават ${days} дни`;
   }
 
   function openDB(){
@@ -155,6 +183,8 @@
         ? `<div class="payment-alert">● Заявката е одобрена. След свързване на плащанията тук ще се появи бутон „Плати €${Number(r.total||0)}“.</div>`
         : r.status==='changes'
         ? `<div class="payment-alert change-alert"><div><strong>● Нужна е промяна</strong><span>${esc(r.changeRequestText || 'Отвори детайлите на заявката, за да видиш какво е необходимо.')}</span></div></div>`
+        : r.status==='active' && r.expiresAt
+        ? `<div class="payment-alert active-period-alert"><div><strong>● Кампанията се излъчва</strong><span>Активна до ${formatDate(r.expiresAt)} · ${clientTimeLeft(r)}</span></div></div>`
         : '';
       return `
         <article class="request-card">
@@ -236,6 +266,16 @@
           <div class="order-line total"><span>Общо</span><strong>€${Number(r.total||0)}</strong></div>
         </div>
       </div>
+      ${(r.activeAt || r.expiresAt) ? `
+      <div class="detail-section">
+        <h4>Период на кампанията</h4>
+        <div class="detail-grid">
+          <div class="detail-box"><span>Начало</span><strong>${r.activeAt ? formatDate(r.activeAt) : '—'}</strong></div>
+          <div class="detail-box"><span>Край</span><strong>${r.expiresAt ? formatDate(r.expiresAt) : '—'}</strong></div>
+        </div>
+        ${r.status==='active' ? `<div class="client-period-note"><strong>${clientTimeLeft(r)}</strong><span>Ако кампанията бъде подновена, крайният срок ще се удължи автоматично.</span></div>` : ''}
+        ${r.status==='done' && r.completionReason==='expired' ? `<div class="client-period-note expired"><strong>Кампанията е приключила</strong><span>Срокът е изтекъл на ${formatDate(r.expiresAt)}.</span></div>` : ''}
+      </div>` : ''}
       <div class="detail-section">
         <h4>Информация</h4>
         <div class="detail-grid">
