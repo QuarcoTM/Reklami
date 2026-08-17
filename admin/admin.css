@@ -565,3 +565,28 @@ button{cursor:pointer}
   font-size:13px;
   font-weight:800;
 }
+
+
+/* Screen assignment v2.2 */
+.assigned-screen-chips{display:flex;flex-wrap:wrap;gap:7px}
+.assigned-screen-chips span{display:inline-flex;align-items:center;min-height:34px;padding:6px 10px;border-radius:999px;background:#eef3ff;color:#244d9d;border:1px solid #d8e3ff;font-size:13px;font-weight:900}
+.screen-assignment-empty{padding:12px 13px;border:1px dashed #d3ccbf;border-radius:13px;color:var(--muted);background:#faf8f3}
+.screen-rule-note{margin-top:9px;color:var(--muted);font-size:12px;line-height:1.45}
+.screen-assign-button{margin-top:11px}
+.screen-assignment-options{display:grid;gap:9px;margin-top:14px}
+.screen-option{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--line);border-radius:14px;background:#faf9f6;cursor:pointer}
+.screen-option:has(input:checked){border-color:#9db6f3;background:#f1f5ff}
+.screen-option input{position:absolute;opacity:0;pointer-events:none}
+.screen-option-check{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:10px;border:1px solid #d1cabd;background:#fff;color:transparent;font-weight:950}
+.screen-option input:checked + .screen-option-check{color:#fff;background:var(--blue);border-color:var(--blue)}
+.screen-option-copy strong,.screen-option-copy small{display:block}
+.screen-option-copy small{color:var(--muted);margin-top:3px;line-height:1.35}
+.screen-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.screen-campaign-list{display:grid;gap:7px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.screen-campaign-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left}
+.screen-campaign-row:hover{border-color:#afc0ec;background:#f7f9ff}
+.screen-campaign-row span{min-width:0}
+.screen-campaign-row strong,.screen-campaign-row small{display:block}
+.screen-campaign-row small{color:var(--muted);margin-top:2px}
+.screen-campaign-row b{flex:0 0 auto;color:var(--blue);font-size:12px}
+.screen-campaign-empty{color:var(--muted);font-size:13px;padding:3px 0}

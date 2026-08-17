@@ -32,6 +32,33 @@
     city: 'CITY'
   };
 
+  const SCREEN_CATALOG = [
+    {id:'funeral', name:'Траурна агенция', tvLabel:'ТРАУРНА<br>АГЕНЦИЯ', description:'Пилотен екран · адресът ще се добави по-късно.'},
+    {id:'pharmacy', name:'Аптека', tvLabel:'АПТЕКА', description:'Планирана локация.'},
+    {id:'restaurant', name:'Заведение', tvLabel:'ЗАВЕДЕНИЕ', description:'Планирана локация.'}
+  ];
+
+  function screenById(id){
+    return SCREEN_CATALOG.find(s => s.id === id) || null;
+  }
+
+  function assignedScreenNames(r){
+    return (r.assignedScreens || []).map(id => screenById(id)?.name).filter(Boolean);
+  }
+
+  function screenLimitText(r){
+    if (r.package === 'single') return 'SINGLE: избери точно 1 екран.';
+    if (r.package === 'local') return 'LOCAL: избери до 3 екрана.';
+    return 'CITY: стандартно 4–5 екрана. В demo режима можеш да разпределиш към наличните в момента локации.';
+  }
+
+  function screenSelectionValidForActivation(r){
+    const count = (r.assignedScreens || []).length;
+    if (r.package === 'single') return count === 1;
+    if (r.package === 'local') return count >= 1 && count <= 3;
+    return count >= 1;
+  }
+
   function esc(v=''){
     return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   }
@@ -264,6 +291,7 @@
     document.querySelector('.sidebar').classList.remove('open');
     if (name === 'requests') renderRequests();
     if (name === 'clients') renderClients();
+    if (name === 'screens') renderScreens();
     if (name === 'creatives') renderCreatives();
   }
 
@@ -530,6 +558,40 @@
       </article>`).join('');
   }
 
+  function renderScreens(){
+    const box = document.getElementById('screensGrid');
+    if (!box) return;
+
+    const requests = syncCampaignLifecycle();
+
+    box.innerHTML = SCREEN_CATALOG.map(screen => {
+      const active = requests
+        .filter(r => r.status === 'active' && (r.assignedScreens || []).includes(screen.id))
+        .sort((a,b) => new Date(a.expiresAt || 0) - new Date(b.expiresAt || 0));
+
+      return `
+        <article class="screen-card panel">
+          <div class="screen-preview"><div class="fake-tv"><span>${screen.tvLabel}</span></div></div>
+          <div class="screen-meta">
+            <div class="screen-card-top">
+              <span class="status-pill ${active.length ? 'status-active' : 'status-draft'}">
+                ${active.length ? `${active.length} ${active.length === 1 ? 'активна реклама' : 'активни реклами'}` : 'Няма активни реклами'}
+              </span>
+            </div>
+            <h3>${esc(screen.name)}</h3>
+            <p>${esc(screen.description)}</p>
+            <div class="screen-campaign-list">
+              ${active.length ? active.map(r => `
+                <button class="screen-campaign-row" data-open-request="${esc(r.id)}">
+                  <span><strong>${esc(r.id)} · ${esc(r.company || 'Кампания')}</strong><small>до ${formatDateOnly(r.expiresAt)}</small></span>
+                  <b>Отвори →</b>
+                </button>`).join('') : '<div class="screen-campaign-empty">Този екран е свободен.</div>'}
+            </div>
+          </div>
+        </article>`;
+    }).join('');
+  }
+
   function renderCreatives(){
     const requests = loadRequests().filter(r => (r.files || []).length);
     const grid = document.getElementById('creativeGrid');
@@ -653,8 +715,21 @@
           </div>` : ''}
       </div>` : ''}
       <div class="drawer-section">
-        <h4>Локации</h4>
-        <div class="note-box">${esc(r.locations || 'Не са посочени предпочитани локации.')}</div>
+        <h4>Предпочитани локации от клиента</h4>
+        <div class="note-box">${esc(r.locations || 'Клиентът не е посочил предпочитани локации.')}</div>
+      </div>
+      <div class="drawer-section">
+        <h4>Реално разпределение по екрани</h4>
+        ${(r.assignedScreens || []).length ? `
+          <div class="assigned-screen-chips">
+            ${assignedScreenNames(r).map(name => `<span>${esc(name)}</span>`).join('')}
+          </div>
+        ` : `<div class="screen-assignment-empty">Все още не са избрани екрани за тази кампания.</div>`}
+        <div class="screen-rule-note">${esc(screenLimitText(r))}</div>
+        ${!['done','rejected'].includes(r.status) ? `
+          <button class="btn btn-light screen-assign-button" data-assign-screens="${esc(r.id)}">
+            ${(r.assignedScreens || []).length ? 'Промени екраните' : 'Избери екрани'}
+          </button>` : ''}
       </div>
       ${(r.creativeText || r.creativeContact) ? `
         <div class="drawer-section">
@@ -730,8 +805,12 @@
         <button class="btn btn-primary" data-action="copy-payment">Копирай платежен текст</button>
         <button class="btn btn-success" data-action="mark-paid">Маркирай платено</button>`;
     }
-    if (r.status === 'paid') return `
-      <button class="btn btn-primary" data-action="activate">Активирай рекламата</button>`;
+    if (r.status === 'paid') {
+      if (!screenSelectionValidForActivation(r)) return `
+        <button class="btn btn-primary" data-assign-screens="${esc(r.id)}">Избери екрани</button>
+        <button class="btn btn-light" disabled>Избери екрани преди активиране</button>`;
+      return `<button class="btn btn-primary" data-action="activate">Активирай рекламата</button>`;
+    }
     if (r.status === 'active') return `
       <button class="btn btn-success" data-action="renew">Платено → удължи +1 месец</button>
       <button class="btn btn-light" data-action="done">Приключи ръчно</button>`;
@@ -826,6 +905,117 @@
 
     saveRequests(requests);
     openRequest(id, false);
+  }
+
+  function openScreenAssignmentDialog(id){
+    const r = loadRequests().find(x => x.id === id);
+    if (!r) return;
+
+    let dialog = document.getElementById('screenAssignmentDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'screenAssignmentDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog screen-assignment-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">РАЗПРЕДЕЛЕНИЕ</span>
+              <h3>На кои екрани ще се излъчва?</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+          <p class="change-dialog-help" id="screenAssignmentRule"></p>
+          <div id="screenAssignmentOptions" class="screen-assignment-options"></div>
+          <div class="change-dialog-error" id="screenAssignmentError" hidden></div>
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-screen-cancel>Отказ</button>
+            <button type="button" class="btn btn-primary" data-screen-save>Запази екраните</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        dialog.classList.remove('show');
+        dialog.dataset.requestId = '';
+      };
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-screen-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+
+      dialog.querySelector('[data-screen-save]').addEventListener('click', () => {
+        const requestId = dialog.dataset.requestId;
+        const requests = loadRequests();
+        const req = requests.find(x => x.id === requestId);
+        if (!req) return;
+
+        const selected = [...dialog.querySelectorAll('input[name="assignedScreen"]:checked')].map(i => i.value);
+        const error = dialog.querySelector('#screenAssignmentError');
+
+        if (!selected.length){
+          error.textContent = 'Избери поне един екран.';
+          error.hidden = false;
+          return;
+        }
+        if (req.package === 'single' && selected.length !== 1){
+          error.textContent = 'Пакет SINGLE може да бъде разпределен само на 1 екран.';
+          error.hidden = false;
+          return;
+        }
+        if (req.package === 'local' && selected.length > 3){
+          error.textContent = 'Пакет LOCAL може да бъде разпределен на максимум 3 екрана.';
+          error.hidden = false;
+          return;
+        }
+
+        req.assignedScreens = selected;
+        req.screensAssignedAt = new Date().toISOString();
+
+        if (!Array.isArray(req.screenAssignmentHistory)) req.screenAssignmentHistory = [];
+        req.screenAssignmentHistory.push({screens:[...selected], createdAt:req.screensAssignedAt});
+
+        saveRequests(requests);
+        close();
+        openRequest(requestId, false);
+        toast(`Запазени ${selected.length} ${selected.length === 1 ? 'екран' : 'екрана'}.`);
+      });
+    }
+
+    dialog.dataset.requestId = id;
+    dialog.querySelector('#screenAssignmentRule').textContent = screenLimitText(r);
+    dialog.querySelector('#screenAssignmentError').hidden = true;
+
+    const selected = new Set(r.assignedScreens || []);
+    const inputType = r.package === 'single' ? 'radio' : 'checkbox';
+    const options = dialog.querySelector('#screenAssignmentOptions');
+
+    options.innerHTML = SCREEN_CATALOG.map(screen => `
+      <label class="screen-option">
+        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''}>
+        <span class="screen-option-check">✓</span>
+        <span class="screen-option-copy">
+          <strong>${esc(screen.name)}</strong>
+          <small>${esc(screen.description)}</small>
+        </span>
+      </label>`).join('');
+
+    if (r.package === 'local'){
+      options.querySelectorAll('input').forEach(input => {
+        input.addEventListener('change', () => {
+          const checked = [...options.querySelectorAll('input:checked')];
+          if (checked.length > 3){
+            input.checked = false;
+            dialog.querySelector('#screenAssignmentError').textContent = 'LOCAL допуска максимум 3 екрана.';
+            dialog.querySelector('#screenAssignmentError').hidden = false;
+          }else{
+            dialog.querySelector('#screenAssignmentError').hidden = true;
+          }
+        });
+      });
+    }
+
+    dialog.classList.add('show');
   }
 
   function openCreativeUploadDialog(id){
@@ -1059,6 +1249,9 @@
     const openBtn = e.target.closest('[data-open-request]');
     if (openBtn) openRequest(openBtn.dataset.openRequest);
 
+    const assignScreens = e.target.closest('[data-assign-screens]');
+    if (assignScreens) openScreenAssignmentDialog(assignScreens.dataset.assignScreens);
+
     const dl = e.target.closest('[data-download-key]');
     if (dl) await downloadFile(dl.dataset.downloadKey, dl.dataset.downloadName);
 
@@ -1079,9 +1272,15 @@
         case 'reject': updateStatus(activeRequestId,'rejected'); toast('Заявката е отказана.'); break;
         case 'mark-paid': updateStatus(activeRequestId,'paid'); toast('Маркирана е като платена.'); break;
         case 'activate': {
+          const beforeActivate = loadRequests().find(x => x.id === activeRequestId);
+          if (!beforeActivate || !screenSelectionValidForActivation(beforeActivate)){
+            toast('Първо избери екраните за кампанията.');
+            openScreenAssignmentDialog(activeRequestId);
+            break;
+          }
           updateStatus(activeRequestId,'active');
           const activated = loadRequests().find(x => x.id === activeRequestId);
-          toast(`Активна до ${formatDateOnly(activated?.expiresAt)}.`);
+          toast(`Активна до ${formatDateOnly(activated?.expiresAt)} на ${activated?.assignedScreens?.length || 0} екрана.`);
           break;
         }
         case 'renew': {
@@ -1119,6 +1318,7 @@
     renderDashboard();
     renderRequests();
     renderClients();
+    renderScreens();
     renderCreatives();
   }
 

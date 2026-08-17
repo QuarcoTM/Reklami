@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f8f6f0">
-  <link rel="stylesheet" href="admin.css?v=1">
+  <link rel="stylesheet" href="admin.css?v=2.2">
   <title>Admin — Kyustendil Screen</title>
   <meta name="robots" content="noindex,nofollow,noarchive">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
@@ -215,22 +215,9 @@
         <!-- Screens -->
         <section class="view" data-view-panel="screens">
           <div class="view-head">
-            <div><span class="section-kicker">МРЕЖА</span><h1>Екрани</h1><p>Първите локации. Реалната връзка със signage системата ще добавим на следващ етап.</p></div>
+            <div><span class="section-kicker">МРЕЖА</span><h1>Екрани</h1><p>Виж кои активни кампании са разпределени към всяка локация. Реалната връзка със signage системата ще добавим на следващ етап.</p></div>
           </div>
-          <div class="screens-grid">
-            <article class="screen-card panel">
-              <div class="screen-preview"><div class="fake-tv"><span>ТРАУРНА<br>АГЕНЦИЯ</span></div></div>
-              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Траурна агенция</h3><p>Пилотен екран · адресът ще се добави по-късно.</p></div>
-            </article>
-            <article class="screen-card panel">
-              <div class="screen-preview"><div class="fake-tv"><span>АПТЕКА</span></div></div>
-              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Аптека</h3><p>Планирана локация.</p></div>
-            </article>
-            <article class="screen-card panel">
-              <div class="screen-preview"><div class="fake-tv"><span>ЗАВЕДЕНИЕ</span></div></div>
-              <div class="screen-meta"><span class="status-pill status-draft">Подготовка</span><h3>Заведение</h3><p>Планирана локация.</p></div>
-            </article>
-          </div>
+          <div id="screensGrid" class="screens-grid"></div>
         </section>
 
         <!-- Creatives -->
@@ -259,6 +246,6 @@
   </aside>
 
   <div class="toast" id="adminToast"></div>
-  <script src="admin.js?v=1"></script>
+  <script src="admin.js?v=2.2"></script>
 </body>
 </html>
