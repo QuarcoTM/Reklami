@@ -56,6 +56,92 @@
     return new Intl.DateTimeFormat('bg-BG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}).format(date);
   }
 
+  function formatDateOnly(value){
+    if (!value) return '—';
+    const date = new Date(value);
+    return new Intl.DateTimeFormat('bg-BG', {day:'2-digit', month:'2-digit', year:'numeric'}).format(date);
+  }
+
+  function addCalendarMonth(value){
+    const source = value instanceof Date ? new Date(value) : new Date(value);
+    const year = source.getFullYear();
+    const month = source.getMonth();
+    const day = source.getDate();
+    const hour = source.getHours();
+    const minute = source.getMinutes();
+    const second = source.getSeconds();
+    const ms = source.getMilliseconds();
+
+    const targetMonthStart = new Date(year, month + 1, 1, hour, minute, second, ms);
+    const lastDayTargetMonth = new Date(
+      targetMonthStart.getFullYear(),
+      targetMonthStart.getMonth() + 1,
+      0
+    ).getDate();
+
+    targetMonthStart.setDate(Math.min(day, lastDayTargetMonth));
+    return targetMonthStart;
+  }
+
+  function campaignMsLeft(r){
+    if (!r?.expiresAt) return null;
+    return new Date(r.expiresAt).getTime() - Date.now();
+  }
+
+  function campaignTimeLeftText(r){
+    const ms = campaignMsLeft(r);
+    if (ms === null) return '';
+    if (ms <= 0) return 'изтекла';
+
+    const hours = Math.ceil(ms / (60 * 60 * 1000));
+    if (hours <= 24) return hours === 1 ? 'остава 1 час' : `остават ${hours} часа`;
+
+    const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+    return days === 1 ? 'остава 1 ден' : `остават ${days} дни`;
+  }
+
+  function campaignUrgency(r){
+    const ms = campaignMsLeft(r);
+    if (ms === null || ms <= 0) return null;
+    const hours = ms / (60 * 60 * 1000);
+    if (hours <= 24) return 'one-day';
+    if (hours <= 72) return 'three-days';
+    return null;
+  }
+
+  function syncCampaignLifecycle(){
+    const requests = loadRequests();
+    let changed = false;
+    const now = new Date();
+
+    requests.forEach(r => {
+      if (r.status !== 'active') return;
+
+      // Migrate older demo active records that were created before v1.6.
+      if (!r.activeAt) {
+        r.activeAt = now.toISOString();
+        changed = true;
+      }
+
+      if (!r.expiresAt) {
+        r.expiresAt = addCalendarMonth(new Date(r.activeAt)).toISOString();
+        changed = true;
+      }
+
+      if (new Date(r.expiresAt).getTime() <= now.getTime()) {
+        r.status = 'done';
+        r.completedAt = now.toISOString();
+        r.completionReason = 'expired';
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    }
+    return requests;
+  }
+
   function openDB(){
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -317,7 +403,7 @@
   }
 
   function renderDashboard(){
-    const requests = loadRequests();
+    const requests = syncCampaignLifecycle();
     const stats = calcStats(requests);
     Object.entries(stats).forEach(([k,v]) => {
       const el = document.querySelector(`[data-stat="${k}"]`);
@@ -348,10 +434,40 @@
           <button class="row-open" data-open-request="${esc(r.id)}">Отвори</button>
         </div>`).join('');
     }
+
+    const expiring = requests
+      .filter(r => r.status === 'active' && campaignUrgency(r))
+      .sort((a,b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+
+    const alertBox = document.getElementById('campaignAlerts');
+    const count = document.getElementById('expiryCount');
+
+    count.textContent = expiring.length;
+    count.hidden = expiring.length === 0;
+
+    if (!expiring.length){
+      alertBox.className = 'campaign-alerts empty-state';
+      alertBox.innerHTML = '<p>Няма кампании, които изтичат през следващите 3 дни.</p>';
+    } else {
+      alertBox.className = 'campaign-alerts';
+      alertBox.innerHTML = expiring.map(r => {
+        const urgency = campaignUrgency(r);
+        const label = urgency === 'one-day' ? 'ИЗТИЧА ДО 24 ЧАСА' : 'ИЗТИЧА ДО 3 ДНИ';
+        return `
+          <button class="campaign-alert ${urgency}" data-open-request="${esc(r.id)}">
+            <span class="alert-icon">!</span>
+            <span class="alert-copy">
+              <strong>${esc(r.id)} · ${esc(r.company || r.name)}</strong>
+              <small>${label} · край ${formatDateOnly(r.expiresAt)} · ${campaignTimeLeftText(r)}</small>
+            </span>
+            <span class="alert-arrow">Отвори →</span>
+          </button>`;
+      }).join('');
+    }
   }
 
   function renderRequests(){
-    const requests = loadRequests();
+    const requests = syncCampaignLifecycle();
     const search = document.getElementById('requestSearch').value.trim().toLowerCase();
     const filter = document.getElementById('statusFilter').value;
     const rows = requests
@@ -502,6 +618,30 @@
           <div class="order-line order-total"><span>Общо</span><strong>€${Number(r.total || 0)}</strong></div>
         </div>
       </div>
+      ${(r.activeAt || r.expiresAt) ? `
+      <div class="drawer-section">
+        <h4>Период на кампанията</h4>
+        <div class="campaign-period-box">
+          <div>
+            <span>Начало</span>
+            <strong>${formatDateOnly(r.activeAt)}</strong>
+          </div>
+          <div>
+            <span>Автоматичен край</span>
+            <strong>${formatDateOnly(r.expiresAt)}</strong>
+          </div>
+        </div>
+        ${r.status === 'active' ? `
+          <div class="campaign-countdown ${campaignUrgency(r) || ''}">
+            <strong>${campaignTimeLeftText(r)}</strong>
+            <span>След тази дата рекламата трябва да спре, ако няма ново плащане.</span>
+          </div>` : ''}
+        ${r.status === 'done' && r.completionReason === 'expired' ? `
+          <div class="campaign-countdown expired">
+            <strong>Приключена автоматично</strong>
+            <span>Срокът е изтекъл на ${formatDateOnly(r.expiresAt)}.</span>
+          </div>` : ''}
+      </div>` : ''}
       <div class="drawer-section">
         <h4>Локации</h4>
         <div class="note-box">${esc(r.locations || 'Не са посочени предпочитани локации.')}</div>
@@ -550,7 +690,11 @@
     if (r.status === 'paid') return `
       <button class="btn btn-primary" data-action="activate">Активирай рекламата</button>`;
     if (r.status === 'active') return `
-      <button class="btn btn-light" data-action="done">Приключи кампанията</button>`;
+      <button class="btn btn-success" data-action="renew">Платено → удължи +1 месец</button>
+      <button class="btn btn-light" data-action="done">Приключи ръчно</button>`;
+    if (r.status === 'done' && r.completionReason === 'expired') return `
+      <button class="btn btn-success" data-action="restart">Ново плащане → пусни за 1 месец</button>
+      <button class="btn btn-light" data-action="reopen">Върни като нова</button>`;
     return `<button class="btn btn-light" data-action="reopen">Върни като нова</button>`;
   }
 
@@ -558,10 +702,85 @@
     const requests = loadRequests();
     const r = requests.find(x => x.id === id);
     if (!r) return;
+
+    const now = new Date();
     r.status = status;
-    if (status === 'waiting') r.approvedAt = new Date().toISOString();
-    if (status === 'paid') r.paidAt = new Date().toISOString();
-    if (status === 'active') r.activeAt = new Date().toISOString();
+
+    if (status === 'waiting') {
+      r.approvedAt = now.toISOString();
+    }
+
+    if (status === 'paid') {
+      r.paidAt = now.toISOString();
+    }
+
+    if (status === 'active') {
+      r.activeAt = now.toISOString();
+      r.expiresAt = addCalendarMonth(now).toISOString();
+      r.completedAt = null;
+      r.completionReason = null;
+    }
+
+    if (status === 'done') {
+      r.completedAt = now.toISOString();
+      r.completionReason = 'manual';
+    }
+
+    if (status === 'new') {
+      r.activeAt = null;
+      r.expiresAt = null;
+      r.completedAt = null;
+      r.completionReason = null;
+    }
+
+    saveRequests(requests);
+    openRequest(id, false);
+  }
+
+  function renewCampaign(id){
+    const requests = syncCampaignLifecycle();
+    const r = requests.find(x => x.id === id);
+    if (!r || r.status !== 'active') return;
+
+    const now = new Date();
+    const currentEnd = r.expiresAt ? new Date(r.expiresAt) : now;
+    const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;
+    const newEnd = addCalendarMonth(base);
+
+    r.expiresAt = newEnd.toISOString();
+    r.lastRenewalPaidAt = now.toISOString();
+
+    if (!Array.isArray(r.renewalHistory)) r.renewalHistory = [];
+    r.renewalHistory.push({
+      paidAt: now.toISOString(),
+      previousEnd: currentEnd.toISOString(),
+      newEnd: newEnd.toISOString()
+    });
+
+    saveRequests(requests);
+    openRequest(id, false);
+  }
+
+  function restartExpiredCampaign(id){
+    const requests = syncCampaignLifecycle();
+    const r = requests.find(x => x.id === id);
+    if (!r) return;
+
+    const now = new Date();
+    r.status = 'active';
+    r.activeAt = now.toISOString();
+    r.expiresAt = addCalendarMonth(now).toISOString();
+    r.completedAt = null;
+    r.completionReason = null;
+    r.lastRenewalPaidAt = now.toISOString();
+
+    if (!Array.isArray(r.renewalHistory)) r.renewalHistory = [];
+    r.renewalHistory.push({
+      paidAt: now.toISOString(),
+      restart: true,
+      newEnd: r.expiresAt
+    });
+
     saveRequests(requests);
     openRequest(id, false);
   }
@@ -682,8 +901,25 @@
         case 'changes': openChangeRequestDialog(activeRequestId); break;
         case 'reject': updateStatus(activeRequestId,'rejected'); toast('Заявката е отказана.'); break;
         case 'mark-paid': updateStatus(activeRequestId,'paid'); toast('Маркирана е като платена.'); break;
-        case 'activate': updateStatus(activeRequestId,'active'); toast('Рекламата е маркирана като активна.'); break;
-        case 'done': updateStatus(activeRequestId,'done'); toast('Кампанията е приключена.'); break;
+        case 'activate': {
+          updateStatus(activeRequestId,'active');
+          const activated = loadRequests().find(x => x.id === activeRequestId);
+          toast(`Активна до ${formatDateOnly(activated?.expiresAt)}.`);
+          break;
+        }
+        case 'renew': {
+          renewCampaign(activeRequestId);
+          const renewed = loadRequests().find(x => x.id === activeRequestId);
+          toast(`Удължена до ${formatDateOnly(renewed?.expiresAt)}.`);
+          break;
+        }
+        case 'restart': {
+          restartExpiredCampaign(activeRequestId);
+          const restarted = loadRequests().find(x => x.id === activeRequestId);
+          toast(`Кампанията е пусната отново до ${formatDateOnly(restarted?.expiresAt)}.`);
+          break;
+        }
+        case 'done': updateStatus(activeRequestId,'done'); toast('Кампанията е приключена ръчно.'); break;
         case 'reopen': updateStatus(activeRequestId,'new'); toast('Заявката е върната като нова.'); break;
         case 'copy-payment': copyPaymentText(r); break;
       }
@@ -702,11 +938,23 @@
   });
 
   function renderAll(){
+    syncCampaignLifecycle();
     renderDashboard();
     renderRequests();
     renderClients();
     renderCreatives();
   }
+
+  // While the demo Admin is open, keep deadlines current automatically.
+  setInterval(() => {
+    if (sessionStorage.getItem(SESSION_KEY) === '1') {
+      const before = JSON.stringify(loadRequests());
+      syncCampaignLifecycle();
+      const after = JSON.stringify(loadRequests());
+      if (before !== after) renderAll();
+      else renderDashboard();
+    }
+  }, 60 * 1000);
 
   // Update admin if a public form in another tab adds a request.
   window.addEventListener('storage', (e) => {
