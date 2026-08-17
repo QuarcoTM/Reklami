@@ -132,6 +132,26 @@
   }
   document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
   document.querySelectorAll('[data-go-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.goView)));
+
+  function openRequestsByStatus(status){
+    const filter = document.getElementById('statusFilter');
+    const search = document.getElementById('requestSearch');
+    if (filter) filter.value = status;
+    if (search) search.value = '';
+    showView('requests');
+    renderRequests();
+  }
+
+  document.querySelectorAll('[data-status-shortcut]').forEach(card => {
+    card.addEventListener('click', () => openRequestsByStatus(card.dataset.statusShortcut));
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openRequestsByStatus(card.dataset.statusShortcut);
+      }
+    });
+  });
+
   document.getElementById('mobileMenu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 
   // Seed demo data
@@ -194,16 +214,24 @@
       el.textContent = stats.new;
       el.hidden = stats.new === 0;
     });
-    const recent = [...requests].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,5);
+    const recent = requests
+      .filter(r => r.status === 'new')
+      .sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt))
+      .slice(0,5);
+
     const box = document.getElementById('recentRequests');
     if (!recent.length){
       box.className = 'compact-list empty-state';
-      box.innerHTML = '<p>Все още няма заявки. Изпрати тестова заявка или зареди примерни данни.</p>';
+      box.innerHTML = '<p>Няма нови заявки за преглед.</p>';
     } else {
       box.className = 'compact-list';
       box.innerHTML = recent.map(r => `
         <div class="compact-row">
-          <div><strong>${esc(r.id)} · ${esc(r.company)}</strong><small>${esc(packageLabels[r.package] || r.package)} · €${Number(r.total || 0)} · ${formatDate(r.createdAt)}</small></div>
+          <div>
+            <strong>${esc(r.id)} · ${esc(r.company)}</strong>
+            <small>${esc(packageLabels[r.package] || r.package)} · €${Number(r.total || 0)} · ${formatDate(r.createdAt)}</small>
+          </div>
+          <span class="status-pill ${statusClasses[r.status] || ''}">${esc(statusLabels[r.status] || r.status)}</span>
           <button class="row-open" data-open-request="${esc(r.id)}">Отвори</button>
         </div>`).join('');
     }

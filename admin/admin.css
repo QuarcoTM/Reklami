@@ -292,3 +292,42 @@ button{cursor:pointer}
   .change-dialog-actions{display:grid;grid-template-columns:1fr}
   .change-dialog-actions .btn{width:100%}
 }
+
+
+/* Dashboard status shortcuts v1.3 */
+.stat-clickable{
+  cursor:pointer;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  position:relative;
+}
+.stat-clickable::after{
+  content:"Виж →";
+  position:absolute;
+  right:16px;
+  bottom:15px;
+  font-size:12px;
+  font-weight:900;
+  opacity:.55;
+}
+.stat-clickable:hover{
+  transform:translateY(-2px);
+  box-shadow:0 13px 30px rgba(20,20,20,.08);
+  border-color:rgba(30,76,201,.28);
+}
+.stat-clickable:focus-visible{
+  outline:3px solid rgba(30,76,201,.18);
+  outline-offset:2px;
+}
+.compact-row .status-pill{
+  margin-left:auto;
+}
+@media(max-width:650px){
+  .stat-clickable::after{
+    position:static;
+    display:block;
+    margin-top:8px;
+  }
+  .compact-row .status-pill{
+    display:none;
+  }
+}
