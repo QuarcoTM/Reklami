@@ -738,3 +738,163 @@ img{display:block;max-width:100%}
     width:100%;
   }
 }
+
+
+/* Privacy Policy v1.8 */
+.privacy-hero{padding:70px 0 34px}
+.privacy-hero p{max-width:850px}
+.privacy-section{padding-top:38px}
+.privacy-layout{
+  display:grid;
+  grid-template-columns:250px minmax(0,1fr);
+  gap:24px;
+  align-items:start;
+}
+.privacy-nav{
+  position:sticky;
+  top:110px;
+  padding:20px;
+  display:grid;
+  gap:5px;
+}
+.privacy-nav .section-tag{margin-bottom:7px}
+.privacy-nav a{
+  padding:9px 10px;
+  border-radius:10px;
+  color:var(--muted);
+  font-size:14px;
+  font-weight:800;
+  line-height:1.35;
+}
+.privacy-nav a:hover{color:var(--blue);background:var(--blue-soft)}
+.privacy-content{display:grid;gap:14px}
+.privacy-draft-notice{
+  padding:18px 20px;
+  border-radius:18px;
+  background:#fff5dd;
+  border:1px solid #ead399;
+}
+.privacy-draft-notice strong{display:block;margin-bottom:5px}
+.privacy-draft-notice p{margin:0;color:#665a40;line-height:1.55}
+.privacy-card{
+  scroll-margin-top:115px;
+  padding:26px;
+  display:grid;
+  grid-template-columns:62px 1fr;
+  gap:20px;
+}
+.privacy-number{
+  width:52px;height:52px;border-radius:16px;
+  display:grid;place-items:center;
+  background:var(--blue-soft);
+  color:var(--blue);
+  font-size:15px;font-weight:950;
+}
+.privacy-card h2{
+  font-size:clamp(25px,3vw,34px);
+  letter-spacing:-.035em;
+  line-height:1.05;
+  margin:2px 0 12px;
+}
+.privacy-card p{
+  margin:0;
+  color:#50535e;
+  font-size:16px;
+  line-height:1.65;
+}
+.privacy-card p+p{margin-top:11px}
+.privacy-list{
+  margin:14px 0 0;
+  padding-left:20px;
+  color:#50535e;
+}
+.privacy-list li{margin:9px 0;line-height:1.55}
+.privacy-soft-note{
+  margin-top:17px;
+  padding:15px 16px;
+  border-radius:14px;
+  background:#fff7e5;
+  border:1px solid #eddcae;
+}
+.privacy-soft-note strong,.privacy-soft-note span{display:block}
+.privacy-soft-note span{margin-top:4px;color:#665d49;line-height:1.5}
+.privacy-placeholder-grid,.legal-basis-grid,.retention-grid{
+  margin-top:16px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.privacy-placeholder-grid>div,.legal-basis-grid>div,.retention-grid>div{
+  padding:14px;
+  border-radius:14px;
+  background:#f8f6f0;
+  border:1px solid var(--line);
+}
+.privacy-placeholder-grid span,.legal-basis-grid span,.retention-grid span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+  margin-bottom:5px;
+}
+.privacy-placeholder-grid strong,.legal-basis-grid strong,.retention-grid strong{
+  display:block;
+  line-height:1.35;
+}
+.legal-basis-grid small,.retention-grid small{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  line-height:1.45;
+}
+.featured-privacy{
+  border:2px solid rgba(30,76,201,.35);
+  background:linear-gradient(145deg,#fff,#f7f9ff);
+}
+.featured-privacy .privacy-number{background:var(--blue);color:#fff}
+.privacy-contact-placeholder{
+  margin:15px 0;
+  padding:15px 16px;
+  border-radius:14px;
+  background:#f8f6f0;
+  border:1px solid var(--line);
+}
+.privacy-contact-placeholder span{
+  display:block;color:var(--muted);font-size:12px;font-weight:800;margin-bottom:4px
+}
+.privacy-external-link{
+  display:inline-block;
+  margin-top:13px;
+  color:var(--blue);
+  font-weight:900;
+}
+.privacy-version{
+  padding:18px 20px;
+  border-radius:18px;
+  background:#17191d;
+  color:#fff;
+  display:grid;
+  grid-template-columns:220px 1fr;
+  gap:20px;
+}
+.privacy-version span{display:block;color:#aeb3bf;font-size:12px;margin-bottom:4px}
+.privacy-version p{margin:0;color:#c8cbd2;line-height:1.5}
+.partneri-privacy-link,.form-help a{color:var(--blue);font-weight:800}
+@media(max-width:850px){
+  .privacy-layout{grid-template-columns:1fr}
+  .privacy-nav{
+    position:static;
+    display:flex;
+    overflow:auto;
+    gap:6px;
+    padding:12px;
+  }
+  .privacy-nav .section-tag{display:none}
+  .privacy-nav a{flex:0 0 auto;background:#f6f2e9}
+}
+@media(max-width:600px){
+  .privacy-card{grid-template-columns:1fr;padding:20px;gap:12px}
+  .privacy-number{width:44px;height:44px;border-radius:13px}
+  .privacy-placeholder-grid,.legal-basis-grid,.retention-grid{grid-template-columns:1fr}
+  .privacy-version{grid-template-columns:1fr}
+}
