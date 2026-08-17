@@ -199,16 +199,15 @@ document.addEventListener('DOMContentLoaded', () => {
             designPrice: design.price,
             total: pkg.price + design.price
           });
-          showToast(`Заявка ${request.id} е изпратена за одобрение. В demo режима вече се вижда в /admin/.`);
-          form.reset();
-          updateDesignPanel();
-          updateOrderSummary();
-          document.querySelectorAll('.file-selection').forEach(el => {
-            const id = el.dataset.fileOutput || '';
-            const input = id ? document.getElementById(id) : null;
-            el.textContent = input && input.multiple ? 'Няма избрани файлове' : 'Няма избран файл';
-            el.classList.remove('has-file');
-          });
+          sessionStorage.setItem('ks_last_submission_v1', JSON.stringify({
+            id: request.id,
+            email: request.email,
+            total: request.total,
+            packageLabel: request.packageLabel,
+            designLabel: request.designLabel,
+            createdAt: request.createdAt
+          }));
+          window.location.href = 'zayavka-poluchena.html';
         } else {
           showToast('Заявката е готова, но demo bridge не е зареден.');
         }
