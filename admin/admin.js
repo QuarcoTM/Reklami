@@ -111,6 +111,13 @@
     demoLogin.hidden = true;
     adminShell.hidden = false;
     renderAll();
+
+    // Wait until the rest of the admin script is initialized, then
+    // create/restore browser history that stays inside /admin/.
+    setTimeout(() => {
+      initAdminHistory();
+      applyAdminHistoryState(history.state);
+    }, 0);
   }
   if (sessionStorage.getItem(SESSION_KEY) === '1') enterAdmin();
   document.getElementById('enterDemo').addEventListener('click', enterAdmin);
@@ -119,9 +126,72 @@
     location.reload();
   });
 
-  // Navigation
+  // Navigation + browser Back/Forward inside Admin
   const titles = {dashboard:'Табло',requests:'Заявки',clients:'Клиенти',screens:'Екрани',creatives:'Материали'};
-  function showView(name){
+  let applyingAdminHistory = false;
+
+  function currentViewName(){
+    return document.querySelector('.view.active')?.dataset.viewPanel || 'dashboard';
+  }
+
+  function currentFilterValue(){
+    return document.getElementById('statusFilter')?.value || 'all';
+  }
+
+  function adminHistoryUrl(state){
+    const view = state?.view || 'dashboard';
+    if (state?.requestId) return `#${view}/${encodeURIComponent(state.requestId)}`;
+    if (view === 'requests' && state?.statusFilter && state.statusFilter !== 'all') {
+      return `#requests?status=${encodeURIComponent(state.statusFilter)}`;
+    }
+    return `#${view}`;
+  }
+
+  function pushAdminHistory(state, replace=false){
+    if (applyingAdminHistory) return;
+
+    const next = {
+      ksAdmin: true,
+      view: state.view || currentViewName(),
+      statusFilter: state.statusFilter ?? (state.view === 'requests' ? currentFilterValue() : 'all'),
+      requestId: state.requestId || null
+    };
+
+    const current = history.state;
+    const same =
+      current?.ksAdmin &&
+      current.view === next.view &&
+      (current.statusFilter || 'all') === (next.statusFilter || 'all') &&
+      (current.requestId || null) === (next.requestId || null);
+
+    if (same && !replace) return;
+
+    const method = replace ? 'replaceState' : 'pushState';
+    history[method](next, '', adminHistoryUrl(next));
+  }
+
+  function initAdminHistory(){
+    if (history.state?.ksAdmin) return;
+
+    // Keep a root Admin entry and a second guard entry.
+    // First Back from the initial dashboard therefore stays in Admin.
+    const rootState = {
+      ksAdmin: true,
+      ksAdminRoot: true,
+      view: 'dashboard',
+      statusFilter: 'all',
+      requestId: null
+    };
+    history.replaceState(rootState, '', '#dashboard');
+
+    const guardState = {
+      ...rootState,
+      ksAdminRoot: false
+    };
+    history.pushState(guardState, '', '#dashboard');
+  }
+
+  function setView(name){
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.viewPanel === name));
     document.querySelectorAll('.nav-item[data-view]').forEach(v => v.classList.toggle('active', v.dataset.view === name));
     document.getElementById('viewTitle').textContent = titles[name] || 'Admin';
@@ -130,6 +200,41 @@
     if (name === 'clients') renderClients();
     if (name === 'creatives') renderCreatives();
   }
+
+  function showView(name, push=true){
+    setView(name);
+    if (push) {
+      pushAdminHistory({
+        view: name,
+        statusFilter: name === 'requests' ? currentFilterValue() : 'all',
+        requestId: null
+      });
+    }
+  }
+
+  function applyAdminHistoryState(state){
+    if (!state?.ksAdmin) return;
+
+    applyingAdminHistory = true;
+
+    const view = state.view || 'dashboard';
+    const filter = document.getElementById('statusFilter');
+    const search = document.getElementById('requestSearch');
+
+    if (filter) filter.value = state.statusFilter || 'all';
+    if (search && view === 'requests') search.value = '';
+
+    setView(view);
+
+    if (state.requestId) {
+      openRequest(state.requestId, false);
+    } else {
+      closeRequestDirect();
+    }
+
+    applyingAdminHistory = false;
+  }
+
   document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
   document.querySelectorAll('[data-go-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.goView)));
 
@@ -138,8 +243,9 @@
     const search = document.getElementById('requestSearch');
     if (filter) filter.value = status;
     if (search) search.value = '';
-    showView('requests');
+    setView('requests');
     renderRequests();
+    pushAdminHistory({view:'requests', statusFilter:status, requestId:null});
   }
 
   document.querySelectorAll('[data-status-shortcut]').forEach(card => {
@@ -153,6 +259,10 @@
   });
 
   document.getElementById('mobileMenu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
+
+  window.addEventListener('popstate', (e) => {
+    if (e.state?.ksAdmin) applyAdminHistoryState(e.state);
+  });
 
   // Seed demo data
   document.getElementById('seedDemo').addEventListener('click', () => {
@@ -324,7 +434,7 @@
   const backdrop = document.getElementById('drawerBackdrop');
   let activeRequestId = null;
 
-  function openRequest(id){
+  function openRequest(id, push=true){
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
     activeRequestId = id;
@@ -334,13 +444,33 @@
     backdrop.hidden = false;
     requestAnimationFrame(() => drawer.classList.add('open'));
     drawer.setAttribute('aria-hidden','false');
+
+    if (push) {
+      pushAdminHistory({
+        view: currentViewName(),
+        statusFilter: currentViewName() === 'requests' ? currentFilterValue() : 'all',
+        requestId: id
+      });
+    }
+  }
+
+  function closeRequestDirect(){
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+    setTimeout(() => {
+      if (!drawer.classList.contains('open')) backdrop.hidden = true;
+    }, 210);
+    activeRequestId = null;
   }
 
   function closeRequest(){
-    drawer.classList.remove('open');
-    drawer.setAttribute('aria-hidden','true');
-    setTimeout(() => backdrop.hidden = true, 210);
-    activeRequestId = null;
+    // When the drawer has its own history entry, Back returns exactly
+    // to the Admin screen from which the request was opened.
+    if (history.state?.ksAdmin && history.state?.requestId) {
+      history.back();
+    } else {
+      closeRequestDirect();
+    }
   }
 
   function requestDetailsHTML(r){
@@ -427,7 +557,7 @@
     if (status === 'paid') r.paidAt = new Date().toISOString();
     if (status === 'active') r.activeAt = new Date().toISOString();
     saveRequests(requests);
-    openRequest(id);
+    openRequest(id, false);
   }
 
   function openChangeRequestDialog(id){
@@ -506,7 +636,7 @@
 
         saveRequests(requests);
         close();
-        openRequest(requestId);
+        openRequest(requestId, false);
         toast('Промяната е изпратена към клиента.');
       });
     }
@@ -557,7 +687,14 @@
   document.getElementById('closeDrawer').addEventListener('click', closeRequest);
   backdrop.addEventListener('click', closeRequest);
   document.getElementById('requestSearch').addEventListener('input', renderRequests);
-  document.getElementById('statusFilter').addEventListener('change', renderRequests);
+  document.getElementById('statusFilter').addEventListener('change', () => {
+    renderRequests();
+    pushAdminHistory({
+      view:'requests',
+      statusFilter:currentFilterValue(),
+      requestId:null
+    }, true);
+  });
 
   function renderAll(){
     renderDashboard();
