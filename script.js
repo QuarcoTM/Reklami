@@ -41,6 +41,59 @@ document.addEventListener('DOMContentLoaded', () => {
     packageSelect.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // v4.7: reveal the right upload/details panel for the selected creative option.
+  const designRadios = document.querySelectorAll('input[name="design"][data-design-type]');
+  const designPanels = document.querySelectorAll('[data-design-panel]');
+
+  function setPanelEnabled(panel, enabled){
+    panel.hidden = !enabled;
+    panel.querySelectorAll('input, textarea, select').forEach(control => {
+      control.disabled = !enabled;
+      control.required = false;
+    });
+    if (!enabled) return;
+    const type = panel.dataset.designPanel;
+    if (type === 'ready') {
+      const file = panel.querySelector('input[name="ready_creative_file"]');
+      if (file) file.required = true;
+    }
+    if (type === 'static') {
+      const text = panel.querySelector('[name="static_text"]');
+      const contact = panel.querySelector('[name="static_contact"]');
+      if (text) text.required = true;
+      if (contact) contact.required = true;
+    }
+    if (type === 'video') {
+      const text = panel.querySelector('[name="video_text"]');
+      const contact = panel.querySelector('[name="video_contact"]');
+      if (text) text.required = true;
+      if (contact) contact.required = true;
+    }
+  }
+
+  function updateDesignPanel(){
+    const checked = document.querySelector('input[name="design"][data-design-type]:checked');
+    designPanels.forEach(panel => setPanelEnabled(panel, !!checked && panel.dataset.designPanel === checked.dataset.designType));
+  }
+
+  designRadios.forEach(radio => radio.addEventListener('change', updateDesignPanel));
+  updateDesignPanel();
+
+  document.querySelectorAll('.real-file-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const output = document.querySelector(`[data-file-output="${input.id}"]`);
+      if (!output) return;
+      const files = Array.from(input.files || []);
+      if (!files.length) {
+        output.textContent = input.multiple ? 'Няма избрани файлове' : 'Няма избран файл';
+        output.classList.remove('has-file');
+        return;
+      }
+      output.textContent = files.map(file => file.name).join(', ');
+      output.classList.add('has-file');
+    });
+  });
+
   const toast = document.querySelector('.toast');
   function showToast(message){
     if(!toast) return;

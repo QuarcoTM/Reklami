@@ -30,7 +30,7 @@
 </header>
 <main>
 <section class="page-hero"><div class="container"><div class="section-tag">Пусни реклама</div><h1>Избери пакет и изпрати запитване</h1><p>Формата е подготвена за GitHub Pages. Преди публичния старт трябва само да я свържем с реален email или форма услуга.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
-<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form><h2>Заявка за реклама</h2><p class="required-note"><span>*</span> – задължително поле</p>
+<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form enctype="multipart/form-data"><h2>Заявка за реклама</h2><p class="required-note"><span>*</span> – задължително поле</p>
 <div class="field"><label>Фирма / бранд <span class="required-star">*</span></label><input required name="company" placeholder="Име на бизнеса"></div>
 <div class="field"><label>Лице за контакт <span class="required-star">*</span></label><input required name="name" placeholder="Име"></div>
 <div class="field"><label>Телефон <span class="required-star">*</span></label><input required name="phone" type="tel" placeholder="Телефон"></div>
@@ -42,26 +42,88 @@
       <p class="creative-help">Избери една опция. Добавката за изработка е еднократна и не се начислява всеки месец.</p>
       <div class="creative-options">
         <label class="creative-option">
-          <input type="radio" name="design" value="Готова визия — €0" required>
+          <input type="radio" name="design" value="Готова визия — €0" data-design-type="ready" required>
           <span class="creative-check"></span>
           <span class="creative-copy"><strong>Имам готова реклама</strong><small>Изпращаш готов JPG, PNG или MP4.</small></span>
           <span class="creative-price">€0</span>
         </label>
         <label class="creative-option">
-          <input type="radio" name="design" value="Статична визия — +€3 еднократно">
+          <input type="radio" name="design" value="Статична визия — +€3 еднократно" data-design-type="static">
           <span class="creative-check"></span>
           <span class="creative-copy"><strong>Искам статична визия</strong><small>Изпращаш лого, текст, снимка и контакти.</small></span>
           <span class="creative-price">+€3 <small>еднократно</small></span>
         </label>
         <label class="creative-option">
-          <input type="radio" name="design" value="Кратко видео — +€10 еднократно">
+          <input type="radio" name="design" value="Кратко видео — +€10 еднократно" data-design-type="video">
           <span class="creative-check"></span>
           <span class="creative-copy"><strong>Искам кратко видео</strong><small>Кратка анимирана реклама, подходяща за екраните.</small></span>
           <span class="creative-price blue">+€10 <small>еднократно</small></span>
         </label>
       </div>
     </fieldset>
-    <div class="field"><label>Бележка <span class="optional-label">по желание</span></label><textarea name="message" placeholder="Опиши офертата, периода или какво искаш да рекламираш..."></textarea></div><p class="form-help">В preview версията формата не изпраща данни към външен сървър.</p><button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack">
+
+    <div class="design-details" aria-live="polite">
+      <section class="design-detail-panel upload-panel" data-design-panel="ready" hidden>
+        <div class="detail-panel-head">
+          <div><span class="badge badge-blue">Готова реклама · €0</span><h3>Качи готовия файл <span class="required-star">*</span></h3></div>
+          <span class="detail-mini">JPG · PNG · MP4</span>
+        </div>
+        <p>Избери готовата снимка или клип, който искаш да се излъчва на екраните.</p>
+        <label class="file-drop" for="readyCreativeFile">
+          <span class="file-drop-icon">↑</span>
+          <span class="file-drop-copy"><strong>Избери снимка или видео</strong><small>JPG, PNG или MP4</small></span>
+          <span class="file-drop-button">Избери файл</span>
+        </label>
+        <input class="real-file-input" id="readyCreativeFile" name="ready_creative_file" type="file" accept="image/jpeg,image/png,video/mp4" disabled>
+        <div class="file-selection" data-file-output="readyCreativeFile">Няма избран файл</div>
+      </section>
+
+      <section class="design-detail-panel static-panel" data-design-panel="static" hidden>
+        <div class="detail-panel-head">
+          <div><span class="badge badge-gold">Статична визия · +€3</span><h3>Дай ни съдържанието за рекламата</h3></div>
+          <span class="detail-mini">еднократно</span>
+        </div>
+        <div class="field"><label>Текст за рекламата <span class="required-star">*</span></label><textarea name="static_text" placeholder="Напр. -20% тази седмица. Запази час на..." disabled></textarea></div>
+        <div class="field"><label>Контакт, който да изпишем <span class="required-star">*</span></label><input name="static_contact" placeholder="Телефон, сайт, Instagram, адрес..." disabled></div>
+        <div class="upload-grid">
+          <div>
+            <label class="mini-upload" for="staticLogoFile"><strong>Лого</strong><small>по желание · JPG/PNG</small><span>Избери файл</span></label>
+            <input class="real-file-input" id="staticLogoFile" name="static_logo_file" type="file" accept="image/jpeg,image/png" disabled>
+            <div class="file-selection compact" data-file-output="staticLogoFile">Няма избран файл</div>
+          </div>
+          <div>
+            <label class="mini-upload" for="staticPhotosFile"><strong>Снимка/снимки</strong><small>по желание · JPG/PNG</small><span>Избери файлове</span></label>
+            <input class="real-file-input" id="staticPhotosFile" name="static_photos_file" type="file" accept="image/jpeg,image/png" multiple disabled>
+            <div class="file-selection compact" data-file-output="staticPhotosFile">Няма избрани файлове</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="design-detail-panel video-panel" data-design-panel="video" hidden>
+        <div class="detail-panel-head">
+          <div><span class="badge badge-blue">Кратко видео · +€10</span><h3>Дай ни съдържанието за видеото</h3></div>
+          <span class="detail-mini">еднократно</span>
+        </div>
+        <div class="field"><label>Какво да казва видеото <span class="required-star">*</span></label><textarea name="video_text" placeholder="Основна оферта, послание, продукт или услуга..." disabled></textarea></div>
+        <div class="field"><label>Контакт, който да изпишем <span class="required-star">*</span></label><input name="video_contact" placeholder="Телефон, сайт, Instagram, адрес..." disabled></div>
+        <div class="upload-grid">
+          <div>
+            <label class="mini-upload" for="videoLogoFile"><strong>Лого</strong><small>по желание · JPG/PNG</small><span>Избери файл</span></label>
+            <input class="real-file-input" id="videoLogoFile" name="video_logo_file" type="file" accept="image/jpeg,image/png" disabled>
+            <div class="file-selection compact" data-file-output="videoLogoFile">Няма избран файл</div>
+          </div>
+          <div>
+            <label class="mini-upload" for="videoAssetsFile"><strong>Снимки/клипове</strong><small>по желание · JPG/PNG/MP4</small><span>Избери файлове</span></label>
+            <input class="real-file-input" id="videoAssetsFile" name="video_assets_file" type="file" accept="image/jpeg,image/png,video/mp4" multiple disabled>
+            <div class="file-selection compact" data-file-output="videoAssetsFile">Няма избрани файлове</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="field"><label>Бележка <span class="optional-label">по желание</span></label><textarea name="message" placeholder="Опиши офертата, периода или допълнителен въпрос..."></textarea></div>
+    <p class="form-help"><strong>GitHub preview:</strong> файловете вече могат да се избират и формата ги валидира. За реалното им изпращане трябва да свържем формата с endpoint преди публичния старт.</p>
+    <button class="btn btn-blue" type="submit">Изпрати запитване</button></form><div class="side-stack">
   <aside class="card info-card">
     <span class="badge badge-blue">Изработка на визия</span>
     <h3>Нямаш готова реклама?</h3>
