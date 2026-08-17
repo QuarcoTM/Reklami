@@ -154,7 +154,7 @@
       const action = r.status==='waiting'
         ? `<div class="payment-alert">● Заявката е одобрена. След свързване на плащанията тук ще се появи бутон „Плати €${Number(r.total||0)}“.</div>`
         : r.status==='changes'
-        ? `<div class="payment-alert">● Има поискана промяна по заявката. Детайлите ще се добавят след Supabase версията.</div>`
+        ? `<div class="payment-alert change-alert"><div><strong>● Нужна е промяна</strong><span>${esc(r.changeRequestText || 'Отвори детайлите на заявката, за да видиш какво е необходимо.')}</span></div></div>`
         : '';
       return `
         <article class="request-card">
@@ -216,6 +216,14 @@
     const files=r.files||[];
     return `
       <div class="detail-section"><span class="status-pill ${st.cls}">${esc(st.label)}</span></div>
+      ${r.status==='changes' && r.changeRequestText ? `
+      <div class="detail-section">
+        <h4>Какво трябва да промениш</h4>
+        <div class="client-change-message">
+          <strong>${esc(r.changeRequestText)}</strong>
+          ${r.changeRequestedAt ? `<small>Поискано на ${formatDate(r.changeRequestedAt)}</small>` : ''}
+        </div>
+      </div>` : ''}
       <div class="detail-section">
         <h4>Статус на кампанията</h4>
         ${statusTimeline(r)}

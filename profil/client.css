@@ -192,3 +192,35 @@ button{cursor:pointer}
  .detail-grid{grid-template-columns:1fr}
  .login-shell{padding:26px 20px}
 }
+
+
+/* Requested changes v1.2 */
+.change-alert{
+  align-items:flex-start;
+}
+.change-alert strong,
+.change-alert span{
+  display:block;
+}
+.change-alert span{
+  margin-top:4px;
+  font-weight:700;
+  line-height:1.45;
+}
+.client-change-message{
+  padding:16px;
+  border-radius:16px;
+  background:var(--orange-soft);
+  border:1px solid #f0d4ac;
+  line-height:1.55;
+}
+.client-change-message strong{
+  display:block;
+  white-space:pre-wrap;
+  font-size:16px;
+}
+.client-change-message small{
+  display:block;
+  margin-top:9px;
+  color:var(--muted);
+}
