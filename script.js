@@ -26,6 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+
+  const params = new URLSearchParams(window.location.search);
+  const locationParam = params.get('location');
+  const locationsInput = document.querySelector('input[name="locations"]');
+  if (locationParam && locationsInput && !locationsInput.value) {
+    locationsInput.value = locationParam;
+  }
+
   const toast = document.querySelector('.toast');
   function showToast(message){
     if(!toast) return;
