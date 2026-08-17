@@ -170,10 +170,57 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.querySelectorAll('form[data-demo-form]').forEach(form => {
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
-      showToast('Заявката е готова за изпращане за одобрение. Плащане няма да бъде поискано на този етап.');
+
+      const packageValue = packageSelect ? packageSelect.value : '';
+      const checkedDesign = document.querySelector('input[name="design"][data-design-type]:checked');
+      const pkg = packageData[packageValue];
+      const design = checkedDesign ? designData[checkedDesign.dataset.designType] : null;
+      if (!pkg || !design) {
+        showToast('Избери пакет и рекламна визия.');
+        return;
+      }
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn ? submitBtn.textContent : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Изпращане...';
+      }
+
+      try {
+        if (window.KSDemoBridge) {
+          const request = await window.KSDemoBridge.submit(form, {
+            packageLabel: pkg.label,
+            packagePrice: pkg.price,
+            designLabel: design.label,
+            designPrice: design.price,
+            total: pkg.price + design.price
+          });
+          showToast(`Заявка ${request.id} е изпратена за одобрение. В demo режима вече се вижда в /admin/.`);
+          form.reset();
+          updateDesignPanel();
+          updateOrderSummary();
+          document.querySelectorAll('.file-selection').forEach(el => {
+            const id = el.dataset.fileOutput || '';
+            const input = id ? document.getElementById(id) : null;
+            el.textContent = input && input.multiple ? 'Няма избрани файлове' : 'Няма избран файл';
+            el.classList.remove('has-file');
+          });
+        } else {
+          showToast('Заявката е готова, но demo bridge не е зареден.');
+        }
+      } catch (error) {
+        console.error(error);
+        showToast('Възникна грешка при запазването на тестовата заявка.');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      }
     });
   });
 });
