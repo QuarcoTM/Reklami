@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const designData = {
     ready: { label: 'Готова реклама — €0', price: 0 },
     static: { label: 'Статична визия — +€3 еднократно', price: 3 },
-    video: { label: 'Кратко видео — +€10 еднократно', price: 10 }
+    video: { label: 'Анимирана рекламна визия — +€10 еднократно', price: 10 }
   };
 
   function updateOrderSummary(){

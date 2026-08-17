@@ -503,3 +503,7 @@ img{display:block;max-width:100%}
   .payment-steps>div{padding:11px 12px;grid-template-columns:34px minmax(0,1fr)}
   .payment-steps>div>span{width:34px;height:34px;font-size:14px}
 }
+
+
+/* v4.11 — clear scope for animated creative service */
+.animation-service-note{display:grid;gap:7px;margin:4px 0 16px;padding:15px 16px;border:1px solid #d7e2ff;border-radius:15px;background:var(--blue-soft);color:var(--ink);font-size:13px;line-height:1.48}.animation-service-note strong{color:var(--blue);font-size:12px;letter-spacing:.04em;text-transform:uppercase}.animation-service-note b{font-weight:900}
