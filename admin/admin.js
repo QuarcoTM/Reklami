@@ -112,11 +112,9 @@
     adminShell.hidden = false;
     renderAll();
 
-    // Wait until the rest of the admin script is initialized, then
-    // create/restore browser history that stays inside /admin/.
+    // Initialize deterministic in-admin navigation after the script is ready.
     setTimeout(() => {
-      initAdminHistory();
-      applyAdminHistoryState(history.state);
+      initAdminNavigation();
     }, 0);
   }
   if (sessionStorage.getItem(SESSION_KEY) === '1') enterAdmin();
@@ -126,69 +124,41 @@
     location.reload();
   });
 
-  // Navigation + browser Back/Forward inside Admin
+  // Deterministic Admin navigation.
+  // We keep our own trail instead of relying on the browser's mixed page history.
   const titles = {dashboard:'Табло',requests:'Заявки',clients:'Клиенти',screens:'Екрани',creatives:'Материали'};
-  let applyingAdminHistory = false;
+  let adminTrail = [];
+  let currentAdminState = {view:'dashboard', statusFilter:'all', requestId:null};
+  let browserBackArmed = false;
+
+  function normalizeAdminState(state={}){
+    return {
+      view: state.view || 'dashboard',
+      statusFilter: state.view === 'requests' ? (state.statusFilter || 'all') : 'all',
+      requestId: state.requestId || null
+    };
+  }
+
+  function sameAdminState(a,b){
+    return a.view === b.view &&
+      (a.statusFilter || 'all') === (b.statusFilter || 'all') &&
+      (a.requestId || null) === (b.requestId || null);
+  }
 
   function currentViewName(){
-    return document.querySelector('.view.active')?.dataset.viewPanel || 'dashboard';
+    return currentAdminState.view || 'dashboard';
   }
 
   function currentFilterValue(){
-    return document.getElementById('statusFilter')?.value || 'all';
+    return currentAdminState.view === 'requests'
+      ? (currentAdminState.statusFilter || 'all')
+      : 'all';
   }
 
-  function adminHistoryUrl(state){
-    const view = state?.view || 'dashboard';
-    if (state?.requestId) return `#${view}/${encodeURIComponent(state.requestId)}`;
-    if (view === 'requests' && state?.statusFilter && state.statusFilter !== 'all') {
-      return `#requests?status=${encodeURIComponent(state.statusFilter)}`;
-    }
-    return `#${view}`;
-  }
-
-  function pushAdminHistory(state, replace=false){
-    if (applyingAdminHistory) return;
-
-    const next = {
-      ksAdmin: true,
-      view: state.view || currentViewName(),
-      statusFilter: state.statusFilter ?? (state.view === 'requests' ? currentFilterValue() : 'all'),
-      requestId: state.requestId || null
-    };
-
-    const current = history.state;
-    const same =
-      current?.ksAdmin &&
-      current.view === next.view &&
-      (current.statusFilter || 'all') === (next.statusFilter || 'all') &&
-      (current.requestId || null) === (next.requestId || null);
-
-    if (same && !replace) return;
-
-    const method = replace ? 'replaceState' : 'pushState';
-    history[method](next, '', adminHistoryUrl(next));
-  }
-
-  function initAdminHistory(){
-    if (history.state?.ksAdmin) return;
-
-    // Keep a root Admin entry and a second guard entry.
-    // First Back from the initial dashboard therefore stays in Admin.
-    const rootState = {
-      ksAdmin: true,
-      ksAdminRoot: true,
-      view: 'dashboard',
-      statusFilter: 'all',
-      requestId: null
-    };
-    history.replaceState(rootState, '', '#dashboard');
-
-    const guardState = {
-      ...rootState,
-      ksAdminRoot: false
-    };
-    history.pushState(guardState, '', '#dashboard');
+  function updateAdminBackButton(){
+    const btn = document.getElementById('adminBack');
+    if (!btn) return;
+    btn.hidden = adminTrail.length === 0;
   }
 
   function setView(name){
@@ -201,51 +171,77 @@
     if (name === 'creatives') renderCreatives();
   }
 
-  function showView(name, push=true){
-    setView(name);
-    if (push) {
-      pushAdminHistory({
-        view: name,
-        statusFilter: name === 'requests' ? currentFilterValue() : 'all',
-        requestId: null
-      });
-    }
-  }
+  function applyAdminState(state){
+    const next = normalizeAdminState(state);
+    currentAdminState = next;
 
-  function applyAdminHistoryState(state){
-    if (!state?.ksAdmin) return;
-
-    applyingAdminHistory = true;
-
-    const view = state.view || 'dashboard';
     const filter = document.getElementById('statusFilter');
     const search = document.getElementById('requestSearch');
 
-    if (filter) filter.value = state.statusFilter || 'all';
-    if (search && view === 'requests') search.value = '';
+    if (filter) filter.value = next.statusFilter || 'all';
+    if (search && next.view === 'requests') search.value = '';
 
-    setView(view);
+    setView(next.view);
 
-    if (state.requestId) {
-      openRequest(state.requestId, false);
+    if (next.requestId) {
+      openRequestDirect(next.requestId);
     } else {
       closeRequestDirect();
     }
 
-    applyingAdminHistory = false;
+    updateAdminBackButton();
+  }
+
+  function navigateAdmin(state){
+    const next = normalizeAdminState(state);
+    if (sameAdminState(currentAdminState, next)) return;
+
+    adminTrail.push({...currentAdminState});
+    applyAdminState(next);
+  }
+
+  function goAdminBack(){
+    if (!adminTrail.length) {
+      // At the Admin root there is nowhere internal to go back to.
+      // Stay on Dashboard; leaving Admin is explicit via the logo/site link.
+      if (!sameAdminState(currentAdminState, {view:'dashboard',statusFilter:'all',requestId:null})) {
+        applyAdminState({view:'dashboard',statusFilter:'all',requestId:null});
+      }
+      return;
+    }
+
+    const previous = adminTrail.pop();
+    applyAdminState(previous);
+  }
+
+  function initAdminNavigation(){
+    adminTrail = [];
+    currentAdminState = {view:'dashboard', statusFilter:'all', requestId:null};
+    applyAdminState(currentAdminState);
+
+    // Browser Back trap:
+    // two same-document entries let us receive popstate before the browser
+    // can jump back to the public website. Each Back is then mapped to our
+    // own exact Admin trail.
+    const baseUrl = location.href.split('#')[0];
+    history.replaceState({ksAdminBase:true}, '', `${baseUrl}#admin-base`);
+    history.pushState({ksAdminTrap:true}, '', `${baseUrl}#admin`);
+    browserBackArmed = true;
+  }
+
+  function showView(name){
+    navigateAdmin({
+      view:name,
+      statusFilter:name === 'requests' ? 'all' : 'all',
+      requestId:null
+    });
   }
 
   document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
   document.querySelectorAll('[data-go-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.goView)));
 
   function openRequestsByStatus(status){
-    const filter = document.getElementById('statusFilter');
-    const search = document.getElementById('requestSearch');
-    if (filter) filter.value = status;
-    if (search) search.value = '';
-    setView('requests');
-    renderRequests();
-    pushAdminHistory({view:'requests', statusFilter:status, requestId:null});
+    navigateAdmin({view:'requests', statusFilter:status, requestId:null});
   }
 
   document.querySelectorAll('[data-status-shortcut]').forEach(card => {
@@ -258,10 +254,17 @@
     });
   });
 
+  document.getElementById('adminBack').addEventListener('click', goAdminBack);
   document.getElementById('mobileMenu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
 
-  window.addEventListener('popstate', (e) => {
-    if (e.state?.ksAdmin) applyAdminHistoryState(e.state);
+  window.addEventListener('popstate', () => {
+    if (sessionStorage.getItem(SESSION_KEY) !== '1' || !browserBackArmed) return;
+
+    // Map the browser's Back gesture/button to one exact Admin step,
+    // then re-arm the same-document trap.
+    goAdminBack();
+    const baseUrl = location.href.split('#')[0];
+    history.pushState({ksAdminTrap:true}, '', `${baseUrl}#admin`);
   });
 
   // Seed demo data
@@ -434,7 +437,7 @@
   const backdrop = document.getElementById('drawerBackdrop');
   let activeRequestId = null;
 
-  function openRequest(id, push=true){
+  function openRequestDirect(id){
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
     activeRequestId = id;
@@ -444,14 +447,19 @@
     backdrop.hidden = false;
     requestAnimationFrame(() => drawer.classList.add('open'));
     drawer.setAttribute('aria-hidden','false');
+  }
 
-    if (push) {
-      pushAdminHistory({
-        view: currentViewName(),
-        statusFilter: currentViewName() === 'requests' ? currentFilterValue() : 'all',
-        requestId: id
-      });
+  function openRequest(id, addToTrail=true){
+    if (!addToTrail) {
+      openRequestDirect(id);
+      return;
     }
+
+    navigateAdmin({
+      view:currentAdminState.view,
+      statusFilter:currentAdminState.statusFilter,
+      requestId:id
+    });
   }
 
   function closeRequestDirect(){
@@ -464,10 +472,8 @@
   }
 
   function closeRequest(){
-    // When the drawer has its own history entry, Back returns exactly
-    // to the Admin screen from which the request was opened.
-    if (history.state?.ksAdmin && history.state?.requestId) {
-      history.back();
+    if (currentAdminState.requestId) {
+      goAdminBack();
     } else {
       closeRequestDirect();
     }
@@ -687,13 +693,12 @@
   document.getElementById('closeDrawer').addEventListener('click', closeRequest);
   backdrop.addEventListener('click', closeRequest);
   document.getElementById('requestSearch').addEventListener('input', renderRequests);
-  document.getElementById('statusFilter').addEventListener('change', () => {
-    renderRequests();
-    pushAdminHistory({
+  document.getElementById('statusFilter').addEventListener('change', (e) => {
+    navigateAdmin({
       view:'requests',
-      statusFilter:currentFilterValue(),
+      statusFilter:e.target.value || 'all',
       requestId:null
-    }, true);
+    });
   });
 
   function renderAll(){
