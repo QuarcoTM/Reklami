@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#fbf8f1">
+  <title>Страницата не е намерена — Kyustendil Screen</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=2.0">
+  <style>
+    .notfound-page{
+      min-height:calc(100vh - 180px);
+      display:grid;
+      place-items:center;
+      padding:56px 0 78px;
+    }
+    .notfound-card{
+      width:min(900px,100%);
+      margin:0 auto;
+      padding:clamp(26px,5vw,54px);
+      border:1px solid var(--line);
+      border-radius:32px;
+      background:
+        radial-gradient(circle at 86% 12%, rgba(30,76,201,.08), transparent 28%),
+        radial-gradient(circle at 10% 92%, rgba(216,166,64,.12), transparent 28%),
+        #fff;
+      box-shadow:0 18px 48px rgba(20,20,20,.07);
+      text-align:center;
+    }
+    .notfound-code{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:106px;
+      height:48px;
+      padding:0 18px;
+      border-radius:999px;
+      background:var(--blue-soft);
+      color:var(--blue);
+      font-size:22px;
+      font-weight:950;
+      letter-spacing:.08em;
+    }
+    .notfound-card h1{
+      max-width:700px;
+      margin:20px auto 12px;
+      font-size:clamp(42px,7vw,72px);
+      line-height:.96;
+      letter-spacing:-.055em;
+    }
+    .notfound-card>p{
+      max-width:650px;
+      margin:0 auto;
+      color:var(--muted);
+      font-size:18px;
+      line-height:1.6;
+    }
+    .notfound-rule{
+      width:180px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin:28px auto;
+    }
+    .notfound-rule .blue{
+      flex:1;
+      height:5px;
+      border-radius:999px;
+      background:var(--blue);
+    }
+    .notfound-rule .dot{
+      width:11px;
+      height:11px;
+      border-radius:50%;
+      background:var(--gold);
+    }
+    .notfound-rule .gold{
+      width:42px;
+      height:4px;
+      border-radius:999px;
+      background:var(--gold);
+    }
+    .notfound-actions{
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-top:26px;
+    }
+    .notfound-actions .btn{
+      min-width:190px;
+    }
+    .notfound-shortcuts{
+      display:flex;
+      justify-content:center;
+      flex-wrap:wrap;
+      gap:8px 18px;
+      margin-top:26px;
+      color:var(--muted);
+      font-size:14px;
+      font-weight:800;
+    }
+    .notfound-shortcuts a:hover{color:var(--blue)}
+    @media(max-width:600px){
+      .notfound-page{padding-top:34px}
+      .notfound-card{padding:28px 18px;border-radius:24px}
+      .notfound-actions{display:grid;grid-template-columns:1fr}
+      .notfound-actions .btn{width:100%}
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container navbar">
+    <a class="logo-link" href="index.html">
+      <img class="logo-main" src="assets/kyustendil-screen-logo.png" alt="Kyustendil Screen">
+    </a>
+    <a class="nav-cta" href="reklamiray.html">Пусни реклама</a>
+  </div>
+</header>
+
+<main class="notfound-page">
+  <div class="container">
+    <section class="notfound-card">
+      <span class="notfound-code">404</span>
+      <h1>Тази страница не съществува.</h1>
+      <p>Линкът може да е стар, адресът да е въведен грешно или страницата да е преместена.</p>
+
+      <div class="notfound-rule" aria-hidden="true">
+        <span class="blue"></span>
+        <span class="dot"></span>
+        <span class="gold"></span>
+      </div>
+
+      <div class="notfound-actions">
+        <a class="btn btn-blue" href="index.html">Към началната страница</a>
+        <a class="btn btn-gold" href="reklamiray.html">Пусни реклама</a>
+      </div>
+
+      <div class="notfound-shortcuts">
+        <a href="lokacii.html">Локации</a>
+        <a href="ceni.html">Пакети и цени</a>
+        <a href="faq.html">FAQ</a>
+        <a href="kontakti.html">Контакти</a>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>© 2026 Kyustendil Screen</span>
+      <div class="footer-colors" aria-label="Бранд цветове"><span class="c1"></span><span class="c2"></span><span class="c3"></span></div>
+    </div>
+  </div>
+</footer>
+
+<script src="script.js?v=2.0"></script>
+</body>
+</html>
