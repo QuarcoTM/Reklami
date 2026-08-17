@@ -7,7 +7,7 @@
   <title>Пусни реклама — Kyustendil Screen</title>
   <meta name="description" content="Изпрати запитване за реклама на екраните в Кюстендил.">
   <link rel="icon" type="image/png" href="assets/favicon.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4.9">
 </head>
 <body data-page="advertise">
 <header class="site-header">
@@ -35,7 +35,7 @@
 <div class="field"><label>Лице за контакт <span class="required-star">*</span></label><input required name="name" placeholder="Име"></div>
 <div class="field"><label>Телефон <span class="required-star">*</span></label><input required name="phone" type="tel" placeholder="Телефон"></div>
 <div class="field"><label>Email <span class="required-star">*</span></label><input required name="email" type="email" placeholder="email@example.com"></div>
-<div class="field field-panel field-package"><label>Пакет <span class="required-star">*</span></label><select required name="package"><option value="" disabled selected>Избери пакет</option><option value="single">SINGLE — €25 / месец</option><option value="local">LOCAL — €49 / месец</option><option value="city">CITY — от €69 / месец</option></select></div>
+<div class="field field-panel field-package"><label>Пакет <span class="required-star">*</span></label><select required name="package"><option value="" disabled selected>Избери пакет</option><option value="single">SINGLE — €25 / месец</option><option value="local">LOCAL — €49 / месец</option><option value="city">CITY — 4–5 екрана — €69 / месец</option></select></div>
 <div class="field"><label>Предпочитани локации <span class="optional-label">по желание</span></label><input name="locations" placeholder="Напр. аптека + заведение"></div>
 <fieldset class="creative-field creative-panel" id="design">
       <legend>Рекламна визия <span class="required-star">*</span></legend>
@@ -127,7 +127,7 @@
       <div class="approval-icon">✓</div>
       <div>
         <strong>На този етап не плащаш нищо.</strong>
-        <p>След като прегледаме заявката и одобрим рекламата, ще получиш потвърждение с крайната цена и линк за плащане.</p>
+        <p>След като прегледаме заявката и одобрим рекламата, ще получиш потвърждение и линк за плащане на сумата, показана в обобщението.</p>
       </div>
     </section>
 
@@ -139,10 +139,10 @@
         </div>
         <span class="summary-status">Плащане след одобрение</span>
       </div>
-      <div class="summary-row"><span>Пакет</span><strong data-summary-package>Не е избран</strong></div>
-      <div class="summary-row"><span>Рекламна визия</span><strong data-summary-design>Не е избрана</strong></div>
-      <div class="summary-total"><span>Ориентировъчно общо след одобрение</span><strong data-summary-total>—</strong></div>
-      <p class="summary-note" data-summary-note>Крайната цена се потвърждава след преглед на заявката.</p>
+      <div class="summary-row"><span>Пакет</span><strong data-summary-package>Избери пакет</strong></div>
+      <div class="summary-row"><span>Рекламна визия</span><strong data-summary-design>Избери визия</strong></div>
+      <div class="summary-total"><span>Общо за плащане след одобрение</span><strong data-summary-total>—</strong></div>
+      <p class="summary-note" data-summary-note>Избраната сума е крайната сума за този пакет и визия.</p>
     </section>
 
     <p class="form-help"><strong>Важно:</strong> бутонът по-долу изпраща заявката за преглед. Плащане се извършва само след одобрение.</p>
@@ -152,7 +152,7 @@
     <h3>Плащаш едва след одобрение</h3>
     <div class="payment-steps">
       <div><span>1</span><p>Изпращаш заявката и файловете.</p></div>
-      <div><span>2</span><p>Преглеждаме рекламата и потвърждаваме цената.</p></div>
+      <div><span>2</span><p>Преглеждаме и одобряваме рекламата.</p></div>
       <div><span>3</span><p>Получаваш линк за плащане.</p></div>
       <div><span>4</span><p>След плащане рекламата влиза за излъчване.</p></div>
     </div>
@@ -205,6 +205,6 @@
   </div>
 </footer>
 <div class="toast" role="status" aria-live="polite"></div>
-<script src="script.js"></script>
+<script src="script.js?v=410"></script>
 </body>
 </html>

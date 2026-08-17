@@ -36,10 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const packageParam = (params.get('package') || '').toLowerCase();
   const packageSelect = document.querySelector('select[name="package"]');
-  if (packageSelect && ['single', 'local', 'city'].includes(packageParam)) {
-    packageSelect.value = packageParam;
-    packageSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  }
 
   // v4.7: reveal the right upload/details panel for the selected creative option.
   const designRadios = document.querySelectorAll('input[name="design"][data-design-type]');
@@ -89,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const packageData = {
     single: { label: 'SINGLE — €25 / месец', price: 25, from: false },
     local: { label: 'LOCAL — €49 / месец', price: 49, from: false },
-    city: { label: 'CITY — от €69 / месец', price: 69, from: true }
+    city: { label: 'CITY — 4–5 екрана — €69 / месец', price: 69, from: false }
   };
   const designData = {
     ready: { label: 'Готова реклама — €0', price: 0 },
@@ -109,22 +105,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!pkg || !design) {
       summaryTotal.textContent = '—';
-      if (summaryNote) summaryNote.textContent = 'Избери пакет и рекламна визия, за да видиш ориентировъчната сума.';
+      if (summaryNote) summaryNote.textContent = 'Избери пакет и рекламна визия, за да видиш точната сума.';
       return;
     }
 
     const total = pkg.price + design.price;
-    summaryTotal.textContent = `${pkg.from ? 'от ' : ''}€${total}`;
+    summaryTotal.textContent = `€${total}`;
     if (summaryNote) {
-      summaryNote.textContent = pkg.from
-        ? 'CITY е с начална цена. Точният брой екрани и крайната сума се потвърждават при одобрението.'
-        : 'Тази сума е ориентировъчна. Крайната цена се потвърждава преди да получиш линк за плащане.';
+      summaryNote.textContent = 'Това е крайната сума за избрания пакет и рекламна визия. Плащането е след одобрение.';
     }
   }
 
+  const requestForm = document.querySelector('form[data-demo-form]');
+  if (requestForm) {
+    // Event delegation makes the summary react reliably on mobile Safari as well.
+    requestForm.addEventListener('change', (event) => {
+      if (event.target.matches('select[name="package"], input[name="design"]')) {
+        updateOrderSummary();
+      }
+    });
+    requestForm.addEventListener('input', (event) => {
+      if (event.target.matches('select[name="package"], input[name="design"]')) {
+        updateOrderSummary();
+      }
+    });
+    requestForm.addEventListener('click', (event) => {
+      if (event.target.closest('.creative-option')) {
+        requestAnimationFrame(updateOrderSummary);
+      }
+    });
+  }
   if (packageSelect) packageSelect.addEventListener('change', updateOrderSummary);
   designRadios.forEach(radio => radio.addEventListener('change', updateOrderSummary));
+
+  // Apply package coming from SINGLE / LOCAL / CITY buttons only after listeners exist.
+  if (packageSelect && ['single', 'local', 'city'].includes(packageParam)) {
+    packageSelect.value = packageParam;
+    packageSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   updateOrderSummary();
+  setTimeout(updateOrderSummary, 0);
 
   document.querySelectorAll('.real-file-input').forEach(input => {
     input.addEventListener('change', () => {
