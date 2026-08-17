@@ -507,3 +507,29 @@ img{display:block;max-width:100%}
 
 /* v4.11 — clear scope for animated creative service */
 .animation-service-note{display:grid;gap:7px;margin:4px 0 16px;padding:15px 16px;border:1px solid #d7e2ff;border-radius:15px;background:var(--blue-soft);color:var(--ink);font-size:13px;line-height:1.48}.animation-service-note strong{color:var(--blue);font-size:12px;letter-spacing:.04em;text-transform:uppercase}.animation-service-note b{font-weight:900}
+
+/* Client Portal v1 */
+.client-login-link{
+  color:var(--blue);
+  font-weight:900!important;
+  border:1px solid rgba(30,76,201,.22);
+  background:rgba(255,255,255,.68);
+}
+.client-login-link:hover{
+  background:var(--blue-soft,#eef3ff)!important;
+}
+.existing-client-note{
+  margin:14px 0 0;
+  color:var(--muted);
+  font-size:14px;
+}
+.existing-client-note a{
+  color:var(--blue);
+  font-weight:900;
+}
+@media(max-width:900px){
+  .client-login-link{
+    border:0;
+    background:transparent;
+  }
+}
