@@ -119,6 +119,7 @@ button{cursor:pointer}
 .status-changes{background:var(--orange-soft);color:var(--orange)}
 .status-waiting{background:var(--gold-soft);color:#7a5a14}
 .status-paid{background:var(--green-soft);color:var(--green)}
+.status-scheduled{background:#e8f3ff;color:#245f91}
 .status-active{background:#f3ecff;color:#7550aa}
 .status-done{background:#f0f0f0;color:#585858}
 .status-rejected{background:var(--red-soft);color:var(--red)}
@@ -2382,3 +2383,15 @@ body.admin-modal-open{
     grid-column:1 / -1;
   }
 }
+
+/* v3.6 — campaign scheduling */
+.campaign-schedule-dialog{max-width:760px}
+.admin-schedule-date-field{display:grid;gap:7px;margin:14px 0 10px;font-weight:800}
+.admin-schedule-date-field input{width:100%;padding:12px 13px;border:1px solid #d8d0c3;border-radius:12px;background:#fff;color:var(--ink);font:inherit}
+.campaign-schedule-period{display:grid;gap:3px;margin:8px 0 16px;padding:12px 13px;border:1px solid #ded7ca;border-radius:13px;background:#faf8f3}
+.campaign-schedule-period span{font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.campaign-schedule-period strong{font-size:15px}
+.campaign-schedule-period small{color:var(--muted);line-height:1.45}
+.campaign-countdown.scheduled{background:#edf6ff;border-color:#cfe4f8;color:#245f91}
+.screen-future-capacity{flex-basis:100%;padding-top:4px;border-top:1px dashed rgba(0,0,0,.08)}
+.screen-future-capacity.is-full{color:#a33b2f;font-weight:850}

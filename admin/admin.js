@@ -30,6 +30,7 @@
     changes: 'Искана промяна',
     waiting: 'Чака плащане',
     paid: 'Платена',
+    scheduled: 'Планирана',
     active: 'Активна',
     done: 'Приключена',
     rejected: 'Отказана'
@@ -40,6 +41,7 @@
     changes: 'status-changes',
     waiting: 'status-waiting',
     paid: 'status-paid',
+    scheduled: 'status-scheduled',
     active: 'status-active',
     done: 'status-done',
     rejected: 'status-rejected'
@@ -376,40 +378,194 @@
     return SCREEN_CATALOG.filter(screen => isScreenPublished(screen) || current.has(screen.id));
   }
 
-  function requestOccupiesClientSlot(r){
-    return Boolean(r) && !['done','rejected'].includes(String(r.status || ''));
+  function finiteMs(value){
+    if (value === Infinity || value === -Infinity) return value;
+    const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    return Number.isFinite(ms) ? ms : null;
   }
 
-  function screenClientReservations(screenId, excludeRequestId=null){
-    return loadRequests().filter(r =>
-      r.id !== excludeRequestId &&
-      requestOccupiesClientSlot(r) &&
-      (r.assignedScreens || []).includes(screenId)
-    );
+  function requestReservationInterval(r, nowMs=Date.now()){
+    if (!r) return null;
+    const status = String(r.status || '');
+    if (['done','rejected'].includes(status)) return null;
+
+    if (status === 'scheduled') {
+      const start = finiteMs(r.scheduledStartAt || r.activeAt);
+      let end = finiteMs(r.scheduledEndAt || r.expiresAt);
+      if (start === null) return null;
+      if (end === null) end = addCalendarMonth(new Date(start)).getTime();
+      if (end <= nowMs && nowMs >= start) return null;
+      return {start,end,kind:'scheduled'};
+    }
+
+    if (status === 'active') {
+      const start = finiteMs(r.activeAt) ?? nowMs;
+      let end = finiteMs(r.expiresAt);
+      if (end === null) end = addCalendarMonth(new Date(start)).getTime();
+      if (end <= nowMs) return null;
+      return {start,end,kind:'active'};
+    }
+
+    // Before a campaign has an actual start period, selected screens are
+    // only a working choice. A sellable slot is reserved only by an active
+    // or scheduled campaign, so future capacity can be calculated exactly.
+    return null;
   }
 
-  function screenHouseReservations(screenId, excludeAdId=null){
-    return loadInternalAds().filter(ad =>
-      ad.id !== excludeAdId &&
-      ad.active !== false &&
-      (ad.assignedScreens || []).includes(screenId)
-    );
+  function houseReservationInterval(ad){
+    if (!ad || ad.active === false) return null;
+    return {start:-Infinity,end:Infinity,kind:'house'};
   }
 
-  function screenTotalCapacity(screenId, {excludeRequestId=null, excludeAdId=null} = {}){
-    const clients = screenClientReservations(screenId, excludeRequestId).length;
-    const house = screenHouseReservations(screenId, excludeAdId).length;
+  function intervalContains(interval, ms){
+    return Boolean(interval) && interval.start <= ms && ms < interval.end;
+  }
+
+  function intervalOverlaps(aStart,aEnd,bStart,bEnd){
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function screenReservations(screenId, {excludeRequestId=null, excludeAdId=null} = {}){
+    const nowMs = Date.now();
+    const clients = loadRequests()
+      .filter(r => r.id !== excludeRequestId && (r.assignedScreens || []).includes(screenId))
+      .map(r => ({type:'client', item:r, interval:requestReservationInterval(r, nowMs)}))
+      .filter(x => x.interval);
+    const house = loadInternalAds()
+      .filter(ad => ad.id !== excludeAdId && (ad.assignedScreens || []).includes(screenId))
+      .map(ad => ({type:'house', item:ad, interval:houseReservationInterval(ad)}))
+      .filter(x => x.interval);
+    return [...clients, ...house];
+  }
+
+  function screenCapacityAt(screenId, when=Date.now(), opts={}){
+    const ms = finiteMs(when);
+    const reservations = screenReservations(screenId, opts);
+    const active = reservations.filter(x => intervalContains(x.interval, ms));
+    const clients = active.filter(x => x.type === 'client').length;
+    const house = active.filter(x => x.type === 'house').length;
     const occupied = clients + house;
-
     return {
-      clients,
-      house,
-      occupied,
+      clients, house, occupied,
       limit:TOTAL_SCREEN_SLOT_LIMIT,
       remaining:Math.max(0, TOTAL_SCREEN_SLOT_LIMIT - occupied),
       full:occupied >= TOTAL_SCREEN_SLOT_LIMIT,
       almostFull:occupied === TOTAL_SCREEN_SLOT_LIMIT - 1
     };
+  }
+
+  function screenTotalCapacity(screenId, opts={}){
+    return screenCapacityAt(screenId, Date.now(), opts);
+  }
+
+  function screenPeriodCapacity(screenId, startValue, endValue, opts={}){
+    const start = finiteMs(startValue);
+    const end = finiteMs(endValue);
+    if (start === null || end === null || start >= end) {
+      return {valid:false, peak:0, remaining:0, full:false, conflict:false, conflictStart:null, conflictEnd:null};
+    }
+
+    const reservations = screenReservations(screenId, opts)
+      .filter(x => intervalOverlaps(start,end,x.interval.start,x.interval.end));
+
+    const boundaries = new Set([start]);
+    reservations.forEach(x => {
+      if (Number.isFinite(x.interval.start) && x.interval.start > start && x.interval.start < end) boundaries.add(x.interval.start);
+      if (Number.isFinite(x.interval.end) && x.interval.end > start && x.interval.end < end) boundaries.add(x.interval.end);
+    });
+    const points = [...boundaries].sort((a,b) => a-b);
+
+    let peak = 0;
+    let conflictStart = null;
+    let conflictEnd = null;
+    for (let i=0;i<points.length;i++){
+      const point = points[i];
+      const occupied = reservations.filter(x => intervalContains(x.interval, point)).length;
+      peak = Math.max(peak, occupied);
+      if (occupied >= TOTAL_SCREEN_SLOT_LIMIT && conflictStart === null){
+        conflictStart = point;
+        let j=i+1;
+        while(j<points.length){
+          const nextPoint=points[j];
+          const nextOccupied=reservations.filter(x=>intervalContains(x.interval,nextPoint)).length;
+          if(nextOccupied<TOTAL_SCREEN_SLOT_LIMIT){ conflictEnd=nextPoint; break; }
+          j++;
+        }
+        if(conflictEnd===null) conflictEnd=end;
+      }
+    }
+
+    return {
+      valid:true,
+      peak,
+      remaining:Math.max(0, TOTAL_SCREEN_SLOT_LIMIT - peak),
+      full:peak >= TOTAL_SCREEN_SLOT_LIMIT,
+      conflict:peak >= TOTAL_SCREEN_SLOT_LIMIT,
+      conflictStart,
+      conflictEnd
+    };
+  }
+
+  function screenIndefiniteCapacity(screenId, opts={}){
+    const start = Date.now();
+    const reservations = screenReservations(screenId, opts);
+    const boundaries = new Set([start]);
+    reservations.forEach(x => {
+      if (Number.isFinite(x.interval.start) && x.interval.start > start) boundaries.add(x.interval.start);
+      if (Number.isFinite(x.interval.end) && x.interval.end > start) boundaries.add(x.interval.end);
+    });
+    const points = [...boundaries].sort((a,b)=>a-b);
+    let peak=0, conflictStart=null, conflictEnd=null;
+    for(let i=0;i<points.length;i++){
+      const point=points[i];
+      const occupied=reservations.filter(x=>intervalContains(x.interval,point)).length;
+      peak=Math.max(peak,occupied);
+      if(occupied>=TOTAL_SCREEN_SLOT_LIMIT && conflictStart===null){
+        conflictStart=point;
+        let j=i+1;
+        while(j<points.length){
+          const nextPoint=points[j];
+          const nextOccupied=reservations.filter(x=>intervalContains(x.interval,nextPoint)).length;
+          if(nextOccupied<TOTAL_SCREEN_SLOT_LIMIT){ conflictEnd=nextPoint; break; }
+          j++;
+        }
+      }
+    }
+    return {
+      valid:true,peak,remaining:Math.max(0,TOTAL_SCREEN_SLOT_LIMIT-peak),
+      full:peak>=TOTAL_SCREEN_SLOT_LIMIT,conflict:peak>=TOTAL_SCREEN_SLOT_LIMIT,
+      conflictStart,conflictEnd
+    };
+  }
+
+  function screenFutureCapacitySummary(screenId){
+    const now = Date.now();
+    const reservations = screenReservations(screenId);
+    const boundaries = new Set([now]);
+    reservations.forEach(x => {
+      if (Number.isFinite(x.interval.start) && x.interval.start > now) boundaries.add(x.interval.start);
+      if (Number.isFinite(x.interval.end) && x.interval.end > now) boundaries.add(x.interval.end);
+    });
+    const points = [...boundaries].sort((a,b)=>a-b);
+    let peak = 0;
+    let fullStart = null;
+    let fullEnd = null;
+    for (let i=0;i<points.length;i++){
+      const point = points[i];
+      const occupied = reservations.filter(x => intervalContains(x.interval,point)).length;
+      peak = Math.max(peak,occupied);
+      if (point > now && occupied >= TOTAL_SCREEN_SLOT_LIMIT && fullStart === null){
+        fullStart = point;
+        let j=i+1;
+        while(j<points.length){
+          const nextPoint=points[j];
+          const nextOccupied=reservations.filter(x=>intervalContains(x.interval,nextPoint)).length;
+          if(nextOccupied<TOTAL_SCREEN_SLOT_LIMIT){ fullEnd=nextPoint; break; }
+          j++;
+        }
+      }
+    }
+    return {peak,fullStart,fullEnd};
   }
 
   function screenCapacityLabel(capacity){
@@ -443,7 +599,7 @@
   }
 
   function screenLimitText(r){
-    const capacityNote = ` Всеки екран има максимум ${TOTAL_SCREEN_SLOT_LIMIT} активни реклами общо по ${FIXED_SLOT_SECONDS} сек.; пълен екран не може да бъде избран.`;
+    const capacityNote = ` Всеки екран има максимум ${TOTAL_SCREEN_SLOT_LIMIT} едновременно активни/планирани реклами общо по ${FIXED_SLOT_SECONDS} сек.; системата проверява целия период и не допуска 11-та реклама.`;
     if (r.package === 'single') return 'SINGLE: избери точно 1 публикуван екран.' + capacityNote;
     if (r.package === 'local') return 'LOCAL: избери от 1 до 3 публикувани екрана.' + capacityNote;
     const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
@@ -452,18 +608,31 @@
       : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните публикувани екрани.') + capacityNote;
   }
 
-  function screenSelectionValidForActivation(r){
-    const assigned = r.assignedScreens || [];
-    const valid = assigned.filter(id => isScreenPublished(screenById(id)));
-    const count = valid.length;
-
-    if (valid.length !== assigned.length) return false;
-    if (valid.some(id => screenTotalCapacity(id, {excludeRequestId:r.id}).full)) return false;
-
+  function packageScreenCountValid(r, assigned){
+    const count = assigned.length;
     if (r.package === 'single') return count === 1;
     if (r.package === 'local') return count >= 1 && count <= 3;
     const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
     return activeCount >= 4 ? count >= 4 && count <= 5 : count >= 1;
+  }
+
+  function screenSelectionConflictForPeriod(r, start, end){
+    const assigned = r.assignedScreens || [];
+    const valid = assigned.filter(id => isScreenPublished(screenById(id)));
+    if (valid.length !== assigned.length || !packageScreenCountValid(r, valid)) {
+      return {type:'selection'};
+    }
+    for (const screenId of valid){
+      const capacity = screenPeriodCapacity(screenId,start,end,{excludeRequestId:r.id});
+      if (capacity.conflict) return {type:'capacity',screenId,capacity};
+    }
+    return null;
+  }
+
+  function screenSelectionValidForActivation(r){
+    const now = new Date();
+    const end = addCalendarMonth(now);
+    return !screenSelectionConflictForPeriod(r, now, end);
   }
 
 
@@ -669,6 +838,41 @@
     return targetMonthStart;
   }
 
+  function localDateInputValue(dateValue){
+    const d = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function parseLocalDateInput(value){
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    const d = new Date(Number(match[1]), Number(match[2])-1, Number(match[3]), 0, 0, 0, 0);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function tomorrowDate(){
+    const d = new Date();
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate()+1);
+    return d;
+  }
+
+  function conflictPeriodText(capacity){
+    if (!capacity?.conflictStart) return 'за част от избрания период';
+    const start = formatDateOnly(new Date(capacity.conflictStart));
+    const end = capacity.conflictEnd ? formatDateOnly(new Date(capacity.conflictEnd)) : '';
+    return end && end !== start ? `${start}–${end}` : start;
+  }
+
+  function plannedPeriod(r){
+    const start = finiteMs(r?.scheduledStartAt || (r?.status === 'active' ? r?.activeAt : null));
+    const end = finiteMs(r?.scheduledEndAt || (r?.status === 'active' ? r?.expiresAt : null));
+    return start !== null && end !== null ? {start:new Date(start),end:new Date(end)} : null;
+  }
+
   function campaignMsLeft(r){
     if (!r?.expiresAt) return null;
     return new Date(r.expiresAt).getTime() - Date.now();
@@ -699,8 +903,40 @@
     const requests = loadRequests();
     let changed = false;
     const now = new Date();
+    const nowMs = now.getTime();
 
     requests.forEach(r => {
+      if (r.status === 'scheduled') {
+        const startMs = finiteMs(r.scheduledStartAt || r.activeAt);
+        let endMs = finiteMs(r.scheduledEndAt || r.expiresAt);
+        if (startMs === null) return;
+        if (endMs === null) {
+          endMs = addCalendarMonth(new Date(startMs)).getTime();
+          r.scheduledEndAt = new Date(endMs).toISOString();
+          r.expiresAt = r.scheduledEndAt;
+          changed = true;
+        }
+
+        if (nowMs >= endMs) {
+          r.status = 'done';
+          r.activeAt = r.activeAt || new Date(startMs).toISOString();
+          r.expiresAt = new Date(endMs).toISOString();
+          r.completedAt = now.toISOString();
+          r.completionReason = 'expired';
+          changed = true;
+          return;
+        }
+
+        if (nowMs >= startMs) {
+          r.status = 'active';
+          r.activeAt = new Date(startMs).toISOString();
+          r.expiresAt = new Date(endMs).toISOString();
+          r.activatedFromScheduleAt = now.toISOString();
+          changed = true;
+        }
+        return;
+      }
+
       if (r.status !== 'active') return;
 
       // Migrate older demo active records that were created before v1.6.
@@ -714,7 +950,7 @@
         changed = true;
       }
 
-      if (new Date(r.expiresAt).getTime() <= now.getTime()) {
+      if (new Date(r.expiresAt).getTime() <= nowMs) {
         r.status = 'done';
         r.completedAt = now.toISOString();
         r.completionReason = 'expired';
@@ -984,6 +1220,10 @@
         if (saved.id && loadRequests().some(r => r.id === saved.id)) openScreenAssignmentDialog(saved.id, true);
         else clearAdminOverlay();
         break;
+      case 'campaign-schedule':
+        if (saved.id && loadRequests().some(r => r.id === saved.id)) openScheduleCampaignDialog(saved.id, true);
+        else clearAdminOverlay();
+        break;
       case 'creative-upload':
         if (saved.id && loadRequests().some(r => r.id === saved.id)) openCreativeUploadDialog(saved.id, true);
         else clearAdminOverlay();
@@ -1076,6 +1316,7 @@
     const modalIds = [
       'internalAdDialog',
       'screenAssignmentDialog',
+      'campaignScheduleDialog',
       'creativeUploadDialog',
       'changeRequestDialog'
     ];
@@ -1323,7 +1564,7 @@
   });
 
   function calcStats(requests){
-    const paidStatuses = ['paid','active','done'];
+    const paidStatuses = ['paid','scheduled','active','done'];
     return {
       new: requests.filter(r => r.status === 'new').length,
       waiting: requests.filter(r => r.status === 'waiting').length,
@@ -1428,7 +1669,7 @@
       if (!map.has(key)) map.set(key, {name:r.name, company:r.company, email:r.email, phone:r.phone, count:0, value:0, last:r.createdAt});
       const c = map.get(key);
       c.count += 1;
-      if (['paid','active','done'].includes(r.status)) c.value += Number(r.total || 0);
+      if (['paid','scheduled','active','done'].includes(r.status)) c.value += Number(r.total || 0);
       if (new Date(r.createdAt) > new Date(c.last)) c.last = r.createdAt;
     });
     const grid = document.getElementById('clientsGrid');
@@ -2349,15 +2590,16 @@
         if(!title){ error.textContent='Напиши име на рекламата.'; error.hidden=false; return; }
         if(!screens.length){ error.textContent='Избери поне един екран.'; error.hidden=false; return; }
 
-        const blockedScreen = screens
+        const shouldReserveHouseSlot = !current || current.active !== false;
+        const blockedScreen = shouldReserveHouseSlot ? screens
           .map(screenId => ({
             screen:screenById(screenId),
-            capacity:screenTotalCapacity(screenId,{excludeAdId:current?.id || null})
+            capacity:screenIndefiniteCapacity(screenId,{excludeAdId:current?.id || null})
           }))
-          .find(x => x.capacity.full);
+          .find(x => x.capacity.conflict) : null;
 
         if(blockedScreen){
-          error.textContent=`„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами. Премахни или спри реклама, или избери друг екран.`;
+          error.textContent=`„${blockedScreen.screen?.name || 'Екран'}“ достига ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT}${blockedScreen.capacity.conflictStart ? ` за ${conflictPeriodText(blockedScreen.capacity)}` : ''}. Собствената реклама е постоянна и би надвишила капацитета в бъдещ период.`;
           error.hidden=false;
           return;
         }
@@ -2429,15 +2671,16 @@
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
     const selected=new Set(existing?.assignedScreens||[]);
     dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>{
-      const capacity=screenTotalCapacity(screen.id,{excludeAdId:existing?.id || null});
-      const disabled=!isScreenPublished(screen) || capacity.full;
+      const nowCapacity=screenTotalCapacity(screen.id,{excludeAdId:existing?.id || null});
+      const capacity=screenIndefiniteCapacity(screen.id,{excludeAdId:existing?.id || null});
+      const disabled=!isScreenPublished(screen) || (existing?.active !== false && capacity.conflict);
       return `
-      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.full?'is-screen-full':''}">
-        <input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${disabled?'disabled':''}>
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${existing?.active !== false && capacity.conflict?'is-screen-full':''}">
+        <input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)&&!disabled?'checked':''} ${disabled?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:capacity.full?' · ПЪЛЕН':''}</strong>
-          <small>${esc(screen.address || screen.description || 'Без адрес')} · Общо реклами ${capacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT} · клиентски ${capacity.clients} · наши ${capacity.house}</small>
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:(existing?.active !== false && capacity.conflict)?' · ЗАЕТ В БЪДЕЩ ПЕРИОД':''}</strong>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · сега ${nowCapacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT} · бъдещ максимум ${capacity.peak}/${TOTAL_SCREEN_SLOT_LIMIT}${capacity.conflict?` · ${conflictPeriodText(capacity)}`:''}</small>
         </span>
       </label>`;
     }).join('');
@@ -2456,11 +2699,11 @@
       const blocked=(ad.assignedScreens||[])
         .map(screenId=>({
           screen:screenById(screenId),
-          capacity:screenTotalCapacity(screenId,{excludeAdId:ad.id})
+          capacity:screenIndefiniteCapacity(screenId,{excludeAdId:ad.id})
         }))
-        .find(x=>x.capacity.full);
+        .find(x=>x.capacity.conflict);
       if(blocked){
-        toast(`„${blocked.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами.`);
+        toast(`„${blocked.screen?.name || 'Екран'}“ достига ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} за ${conflictPeriodText(blocked.capacity)}. Включването е отказано.`);
         return;
       }
       ad.active=true;
@@ -2498,6 +2741,7 @@
       const rotationStats = screenRotationStats(screen.id);
       const readiness = screenReadiness(screen.id);
       const totalCapacity = screenTotalCapacity(screen.id);
+      const futureCapacity = screenFutureCapacitySummary(screen.id);
 
       const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
       const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
@@ -2539,6 +2783,9 @@
               <div class="screen-capacity-foot">
                 <span>Клиентски: ${totalCapacity.clients} · Наши: ${totalCapacity.house}</span>
                 <span>Макс. цикъл: ${TOTAL_SCREEN_SLOT_LIMIT * FIXED_SLOT_SECONDS} сек.</span>
+                <span class="screen-future-capacity ${futureCapacity.fullStart ? 'is-full' : ''}">${futureCapacity.fullStart
+                  ? `Планирано запълване: ${formatDateOnly(futureCapacity.fullStart)}${futureCapacity.fullEnd ? `–${formatDateOnly(futureCapacity.fullEnd)}` : ''} · ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT}`
+                  : `Бъдещ максимум: ${futureCapacity.peak}/${TOTAL_SCREEN_SLOT_LIMIT}`}</span>
               </div>
             </div>
 
@@ -3418,23 +3665,28 @@
           <div class="order-line order-total"><span>Общо</span><strong>€${Number(r.total || 0)}</strong></div>
         </div>
       </div>
-      ${(r.activeAt || r.expiresAt) ? `
+      ${(r.activeAt || r.expiresAt || r.scheduledStartAt || r.scheduledEndAt) ? `
       <div class="drawer-section">
         <h4>Период на кампанията</h4>
         <div class="campaign-period-box">
           <div>
-            <span>Начало</span>
-            <strong>${formatDateOnly(r.activeAt)}</strong>
+            <span>${r.status === 'scheduled' ? 'Планирано начало' : 'Начало'}</span>
+            <strong>${formatDateOnly(r.status === 'scheduled' ? r.scheduledStartAt : r.activeAt)}</strong>
           </div>
           <div>
-            <span>Автоматичен край</span>
-            <strong>${formatDateOnly(r.expiresAt)}</strong>
+            <span>${r.status === 'scheduled' ? 'Планиран край' : 'Автоматичен край'}</span>
+            <strong>${formatDateOnly(r.status === 'scheduled' ? (r.scheduledEndAt || r.expiresAt) : r.expiresAt)}</strong>
           </div>
         </div>
         ${r.status === 'active' ? `
           <div class="campaign-countdown ${campaignUrgency(r) || ''}">
             <strong>${campaignTimeLeftText(r)}</strong>
             <span>След тази дата рекламата трябва да спре, ако няма ново плащане.</span>
+          </div>` : ''}
+        ${r.status === 'scheduled' ? `
+          <div class="campaign-countdown scheduled">
+            <strong>Планирана за ${formatDateOnly(r.scheduledStartAt)}</strong>
+            <span>Ще стане активна автоматично на началната дата и няма да влиза в playlist-а преди това.</span>
           </div>` : ''}
         ${r.status === 'done' && r.completionReason === 'expired' ? `
           <div class="campaign-countdown expired">
@@ -3534,11 +3786,18 @@
         <button class="btn btn-success" data-action="mark-paid">Маркирай платено</button>`;
     }
     if (r.status === 'paid') {
+      const scheduleButton = `<button class="btn btn-success" data-action="schedule">Планирай за бъдеща дата</button>`;
       if (!screenSelectionValidForActivation(r)) return `
-        <button class="btn btn-primary" data-assign-screens="${esc(r.id)}">Избери екрани</button>
-        <button class="btn btn-light" disabled>Избери екрани преди активиране</button>`;
-      return `<button class="btn btn-primary" data-action="activate">Активирай рекламата</button>`;
+        ${scheduleButton}
+        <button class="btn btn-primary" data-assign-screens="${esc(r.id)}">Избери екрани за старт сега</button>
+        <button class="btn btn-light" disabled>За старт сега трябва да има свободен капацитет за целия месец</button>`;
+      return `
+        <button class="btn btn-primary" data-action="activate">Активирай сега</button>
+        ${scheduleButton}`;
     }
+    if (r.status === 'scheduled') return `
+      <button class="btn btn-primary" data-action="schedule">Промени плана</button>
+      <button class="btn btn-light" data-action="cancel-schedule">Отмени планирането</button>`;
     if (r.status === 'active') return `
       <button class="btn btn-success" data-action="renew">Платено → удължи +1 месец</button>
       <button class="btn btn-light" data-action="done">Приключи ръчно</button>`;
@@ -3567,6 +3826,8 @@
     if (status === 'active') {
       r.activeAt = now.toISOString();
       r.expiresAt = addCalendarMonth(now).toISOString();
+      r.scheduledStartAt = null;
+      r.scheduledEndAt = null;
       r.completedAt = null;
       r.completionReason = null;
     }
@@ -3579,6 +3840,9 @@
     if (status === 'new') {
       r.activeAt = null;
       r.expiresAt = null;
+      r.scheduledStartAt = null;
+      r.scheduledEndAt = null;
+      r.scheduledAt = null;
       r.completedAt = null;
       r.completionReason = null;
     }
@@ -3587,15 +3851,45 @@
     openRequest(id, false);
   }
 
+  function activateCampaignNow(id){
+    const requests = syncCampaignLifecycle();
+    const r = requests.find(x => x.id === id);
+    if (!r) return {ok:false,type:'missing'};
+
+    const now = new Date();
+    const end = addCalendarMonth(now);
+    const conflict = screenSelectionConflictForPeriod(r, now, end);
+    if (conflict) return {ok:false,...conflict,start:now,end};
+
+    r.status = 'active';
+    r.activeAt = now.toISOString();
+    r.expiresAt = end.toISOString();
+    r.scheduledStartAt = null;
+    r.scheduledEndAt = null;
+    r.scheduledAt = null;
+    r.completedAt = null;
+    r.completionReason = null;
+
+    saveRequests(requests);
+    openRequest(id, false);
+    return {ok:true,start:now,end};
+  }
+
   function renewCampaign(id){
     const requests = syncCampaignLifecycle();
     const r = requests.find(x => x.id === id);
-    if (!r || r.status !== 'active') return;
+    if (!r || r.status !== 'active') return {ok:false,type:'status'};
 
     const now = new Date();
     const currentEnd = r.expiresAt ? new Date(r.expiresAt) : now;
     const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;
     const newEnd = addCalendarMonth(base);
+
+    for (const screenId of (r.assignedScreens || [])){
+      if (!isScreenPublished(screenById(screenId))) return {ok:false,type:'selection',screenId};
+      const capacity = screenPeriodCapacity(screenId, base, newEnd, {excludeRequestId:r.id});
+      if (capacity.conflict) return {ok:false,type:'capacity',screenId,capacity,start:base,end:newEnd};
+    }
 
     r.expiresAt = newEnd.toISOString();
     r.lastRenewalPaidAt = now.toISOString();
@@ -3609,19 +3903,25 @@
 
     saveRequests(requests);
     openRequest(id, false);
+    return {ok:true,newEnd};
   }
 
   function restartExpiredCampaign(id){
     const requests = syncCampaignLifecycle();
     const r = requests.find(x => x.id === id);
-    if (!r) return false;
-
-    if (!screenSelectionValidForActivation(r)) return false;
+    if (!r) return {ok:false,type:'missing'};
 
     const now = new Date();
+    const end = addCalendarMonth(now);
+    const conflict = screenSelectionConflictForPeriod(r, now, end);
+    if (conflict) return {ok:false,...conflict,start:now,end};
+
     r.status = 'active';
     r.activeAt = now.toISOString();
-    r.expiresAt = addCalendarMonth(now).toISOString();
+    r.expiresAt = end.toISOString();
+    r.scheduledStartAt = null;
+    r.scheduledEndAt = null;
+    r.scheduledAt = null;
     r.completedAt = null;
     r.completionReason = null;
     r.lastRenewalPaidAt = now.toISOString();
@@ -3635,13 +3935,200 @@
 
     saveRequests(requests);
     openRequest(id, false);
-    return true;
+    return {ok:true,end};
   }
 
-  function openScreenAssignmentDialog(id, restoring=false){
+  function openScheduleCampaignDialog(id, restoring=false){
+    saveAdminOverlay('campaign-schedule', id);
+    const request = loadRequests().find(x => x.id === id);
+    if (!request || !['paid','scheduled'].includes(request.status)) return;
+
+    let dialog = document.getElementById('campaignScheduleDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'campaignScheduleDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog campaign-schedule-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ПЛАНИРАНЕ</span>
+              <h3>Планирай рекламата</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+          <p class="change-dialog-help">Избери начална дата и екрани. Системата проверява целия едномесечен период и не допуска над 10 реклами на нито един екран.</p>
+          <label class="admin-schedule-date-field">
+            <span>Начална дата <b class="admin-required-star">*</b></span>
+            <input type="date" id="campaignScheduleStart" required>
+          </label>
+          <div class="campaign-schedule-period" id="campaignSchedulePeriod"></div>
+          <div class="admin-field-title">Екрани <b class="admin-required-star">*</b></div>
+          <div id="campaignScheduleScreens" class="screen-assignment-options"></div>
+          <div class="change-dialog-error" id="campaignScheduleError" hidden></div>
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-schedule-cancel>Отказ</button>
+            <button type="button" class="btn btn-primary" data-schedule-save>Запази плана</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        dialog.classList.remove('show');
+        dialog.dataset.requestId = '';
+        clearAdminOverlay('campaign-schedule');
+      };
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-schedule-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+
+      const renderOptions = () => {
+        const req = loadRequests().find(x => x.id === dialog.dataset.requestId);
+        if (!req) return;
+        const startInput = dialog.querySelector('#campaignScheduleStart');
+        const start = parseLocalDateInput(startInput.value);
+        const periodBox = dialog.querySelector('#campaignSchedulePeriod');
+        const options = dialog.querySelector('#campaignScheduleScreens');
+        const error = dialog.querySelector('#campaignScheduleError');
+        error.hidden = true;
+
+        if (!start){
+          periodBox.innerHTML = '<span>Избери начална дата.</span>';
+          options.innerHTML = '';
+          return;
+        }
+        const end = addCalendarMonth(start);
+        periodBox.innerHTML = `<span>Период</span><strong>${formatDateOnly(start)} → ${formatDateOnly(end)}</strong><small>1 календарен месец · крайният момент не се застъпва със следваща кампания, започваща на същата дата.</small>`;
+
+        const selected = new Set(req.assignedScreens || []);
+        const inputType = req.package === 'single' ? 'radio' : 'checkbox';
+        options.innerHTML = selectableScreens(req.assignedScreens || []).map(screen => {
+          const capacity = screenPeriodCapacity(screen.id,start,end,{excludeRequestId:req.id});
+          const blocked = !isScreenPublished(screen) || capacity.conflict;
+          const after = Math.min(TOTAL_SCREEN_SLOT_LIMIT + 1, capacity.peak + 1);
+          const status = !isScreenPublished(screen)
+            ? screenStatusLabel(screen)
+            : capacity.conflict
+              ? `ЗАЕТ · ${conflictPeriodText(capacity)}`
+              : after === TOTAL_SCREEN_SLOT_LIMIT
+                ? 'ПОСЛЕДНО МЯСТО'
+                : 'СВОБОДЕН';
+          return `
+            <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.conflict?'is-screen-full':''}">
+              <input type="${inputType}" name="scheduleScreen" value="${esc(screen.id)}" ${selected.has(screen.id) && !blocked?'checked':''} ${blocked?'disabled':''}>
+              <span class="screen-option-check">✓</span>
+              <span class="screen-option-copy">
+                <strong>${esc(screen.name)} · ${esc(status)}</strong>
+                <small>${esc(screen.address || screen.description || 'Без адрес')} · максимум за периода ${capacity.peak}/${TOTAL_SCREEN_SLOT_LIMIT} преди тази кампания · след нея до ${after}/${TOTAL_SCREEN_SLOT_LIMIT}</small>
+              </span>
+            </label>`;
+        }).join('');
+
+        const limitSelections = e => {
+          const checked = [...options.querySelectorAll('input:checked')];
+          const max = req.package === 'single' ? 1 : req.package === 'local' ? 3 : 5;
+          if (checked.length > max){
+            e.target.checked = false;
+            error.textContent = req.package === 'local' ? 'LOCAL допуска максимум 3 екрана.' : req.package === 'city' ? 'CITY допуска максимум 5 екрана.' : 'SINGLE допуска точно 1 екран.';
+            error.hidden = false;
+          } else error.hidden = true;
+        };
+        options.querySelectorAll('input').forEach(input => input.addEventListener('change', limitSelections));
+      };
+
+      dialog.querySelector('#campaignScheduleStart').addEventListener('change', renderOptions);
+      dialog.querySelector('[data-schedule-save]').addEventListener('click', () => {
+        const requestId = dialog.dataset.requestId;
+        const requests = syncCampaignLifecycle();
+        const req = requests.find(x => x.id === requestId);
+        const error = dialog.querySelector('#campaignScheduleError');
+        if (!req || !['paid','scheduled'].includes(req.status)) return;
+
+        const start = parseLocalDateInput(dialog.querySelector('#campaignScheduleStart').value);
+        const min = tomorrowDate();
+        if (!start || start.getTime() < min.getTime()){
+          error.textContent = 'Планираната кампания трябва да започва най-рано утре. За днес използвай „Активирай сега“.';
+          error.hidden = false;
+          return;
+        }
+        const end = addCalendarMonth(start);
+        const selected = [...dialog.querySelectorAll('input[name="scheduleScreen"]:checked')].map(i => i.value);
+        if (!packageScreenCountValid(req, selected)){
+          error.textContent = req.package === 'single'
+            ? 'SINGLE изисква точно 1 екран.'
+            : req.package === 'local'
+              ? 'LOCAL изисква от 1 до 3 екрана.'
+              : (SCREEN_CATALOG.filter(isScreenPublished).length >= 4
+                  ? 'CITY изисква 4–5 публикувани екрана.'
+                  : 'CITY в demo режим допуска наличните публикувани екрани. Избери поне 1.');
+          error.hidden = false;
+          return;
+        }
+
+        for (const screenId of selected){
+          const screen = screenById(screenId);
+          if (!isScreenPublished(screen)){
+            error.textContent = `„${screen?.name || 'Екран'}“ вече не е публикуван. Избери друг екран.`;
+            error.hidden = false;
+            return;
+          }
+          const capacity = screenPeriodCapacity(screenId,start,end,{excludeRequestId:req.id});
+          if (capacity.conflict){
+            error.textContent = `„${screen?.name || 'Екран'}“ достига ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} за ${conflictPeriodText(capacity)}. Тази кампания би станала №${TOTAL_SCREEN_SLOT_LIMIT + 1}, затова планирането е отказано.`;
+            error.hidden = false;
+            renderOptions();
+            return;
+          }
+        }
+
+        const now = new Date();
+        req.status = 'scheduled';
+        req.assignedScreens = selected;
+        req.screensAssignedAt = now.toISOString();
+        req.scheduledAt = now.toISOString();
+        req.scheduledStartAt = start.toISOString();
+        req.scheduledEndAt = end.toISOString();
+        req.activeAt = null;
+        req.expiresAt = end.toISOString();
+        req.completedAt = null;
+        req.completionReason = null;
+
+        if (!Array.isArray(req.screenAssignmentHistory)) req.screenAssignmentHistory = [];
+        req.screenAssignmentHistory.push({screens:[...selected], createdAt:now.toISOString(), reason:'schedule'});
+        if (!Array.isArray(req.scheduleHistory)) req.scheduleHistory = [];
+        req.scheduleHistory.push({createdAt:now.toISOString(), start:req.scheduledStartAt, end:req.scheduledEndAt, screens:[...selected]});
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+        renderAll();
+        close();
+        openRequest(requestId, false);
+        toast(`Планирана за ${formatDateOnly(start)}–${formatDateOnly(end)} на ${selected.length} ${selected.length === 1 ? 'екран' : 'екрана'}.`);
+      });
+
+      dialog._renderScheduleOptions = renderOptions;
+    }
+
+    dialog.dataset.requestId = id;
+    const minDate = tomorrowDate();
+    const startInput = dialog.querySelector('#campaignScheduleStart');
+    startInput.min = localDateInputValue(minDate);
+    const existingStart = request.status === 'scheduled' ? parseLocalDateInput(localDateInputValue(request.scheduledStartAt)) : null;
+    startInput.value = localDateInputValue(existingStart && existingStart >= minDate ? existingStart : minDate);
+    dialog._renderScheduleOptions?.();
+    dialog.classList.add('show');
+    if (!restoring) requestAnimationFrame(() => startInput.focus());
+  }
+
+  function openScreenAssignmentDialog(id, restoring=false, periodOverride=null){
     saveAdminOverlay('screen-assignment', id);
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
+    const automaticPeriod = r.status === 'scheduled'
+      ? plannedPeriod(r)
+      : (r.status === 'active' && r.expiresAt
+          ? {start:new Date(),end:new Date(r.expiresAt)}
+          : (r.status === 'paid' ? {start:new Date(),end:addCalendarMonth(new Date())} : null));
+    const capacityPeriod = periodOverride || automaticPeriod;
 
     let dialog = document.getElementById('screenAssignmentDialog');
     if (!dialog){
@@ -3692,11 +4179,19 @@
           return;
         }
 
+        const periodStart = finiteMs(dialog.dataset.periodStart);
+        const periodEnd = finiteMs(dialog.dataset.periodEnd);
         const blockedScreen = selected
-          .map(screenId => ({screen:screenById(screenId), capacity:screenTotalCapacity(screenId,{excludeRequestId:req.id})}))
-          .find(x => x.capacity.full);
+          .map(screenId => ({
+            screen:screenById(screenId),
+            capacity:periodStart !== null && periodEnd !== null
+              ? screenPeriodCapacity(screenId,periodStart,periodEnd,{excludeRequestId:req.id})
+              : screenTotalCapacity(screenId,{excludeRequestId:req.id})
+          }))
+          .find(x => x.capacity.conflict || x.capacity.full);
         if(blockedScreen){
-          error.textContent = `„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами. Избери друг екран.`;
+          const periodText = blockedScreen.capacity.conflict ? ` за ${conflictPeriodText(blockedScreen.capacity)}` : '';
+          error.textContent = `„${blockedScreen.screen?.name || 'Екран'}“ е пълен${periodText} — няма свободен слот за тази кампания. Избери друг екран.`;
           error.hidden = false;
           return;
         }
@@ -3732,7 +4227,11 @@
     }
 
     dialog.dataset.requestId = id;
-    dialog.querySelector('#screenAssignmentRule').textContent = screenLimitText(r);
+    dialog.dataset.periodStart = capacityPeriod ? String(new Date(capacityPeriod.start).getTime()) : '';
+    dialog.dataset.periodEnd = capacityPeriod ? String(new Date(capacityPeriod.end).getTime()) : '';
+    dialog.querySelector('#screenAssignmentRule').textContent = capacityPeriod
+      ? `${screenLimitText(r)} Проверка за периода ${formatDateOnly(capacityPeriod.start)}–${formatDateOnly(capacityPeriod.end)}.`
+      : screenLimitText(r);
     dialog.querySelector('#screenAssignmentError').hidden = true;
 
     const selected = new Set(r.assignedScreens || []);
@@ -3740,15 +4239,19 @@
     const options = dialog.querySelector('#screenAssignmentOptions');
 
     options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => {
-      const capacity=screenTotalCapacity(screen.id,{excludeRequestId:r.id});
-      const disabled=!isScreenPublished(screen) || capacity.full;
+      const capacity=capacityPeriod
+        ? screenPeriodCapacity(screen.id,capacityPeriod.start,capacityPeriod.end,{excludeRequestId:r.id})
+        : screenTotalCapacity(screen.id,{excludeRequestId:r.id});
+      const blocked=Boolean(capacity.conflict || capacity.full);
+      const disabled=!isScreenPublished(screen) || blocked;
+      const used = capacityPeriod ? capacity.peak : capacity.occupied;
       return `
-      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.full?'is-screen-full':''}">
-        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${disabled?'disabled':''}>
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${blocked?'is-screen-full':''}">
+        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) && !disabled?'checked':''} ${disabled?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:capacity.full?' · ПЪЛЕН':''}</strong>
-          <small>${esc(screen.address || screen.description || 'Без адрес')} · Общо реклами ${capacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT}${capacity.almostFull?' · последно свободно място':''}</small>
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:blocked?' · ПЪЛЕН':''}</strong>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · ${capacityPeriod?'Максимум за периода':'Общо реклами'} ${used}/${TOTAL_SCREEN_SLOT_LIMIT}${used===TOTAL_SCREEN_SLOT_LIMIT-1?' · последно свободно място':''}${capacity.conflict?` · зает ${conflictPeriodText(capacity)}`:''}</small>
         </span>
       </label>`;
     }).join('');
@@ -4140,27 +4643,62 @@
         case 'reject': updateStatus(activeRequestId,'rejected'); toast('Заявката е отказана.'); break;
         case 'mark-paid': updateStatus(activeRequestId,'paid'); toast('Маркирана е като платена.'); break;
         case 'activate': {
-          const beforeActivate = loadRequests().find(x => x.id === activeRequestId);
-          if (!beforeActivate || !screenSelectionValidForActivation(beforeActivate)){
-            toast('Първо избери екраните за кампанията.');
-            openScreenAssignmentDialog(activeRequestId);
+          const result = activateCampaignNow(activeRequestId);
+          if (!result.ok){
+            if (result.type === 'capacity'){
+              const screen = screenById(result.screenId);
+              toast(`„${screen?.name || 'Екран'}“ ще е пълен за ${conflictPeriodText(result.capacity)}. Стартът е отказан.`);
+            } else toast('Избери правилния брой публикувани екрани за кампанията.');
+            openScreenAssignmentDialog(activeRequestId, false, {start:result.start || new Date(), end:result.end || addCalendarMonth(new Date())});
             break;
           }
-          updateStatus(activeRequestId,'active');
           const activated = loadRequests().find(x => x.id === activeRequestId);
           toast(`Активна до ${formatDateOnly(activated?.expiresAt)} на ${activated?.assignedScreens?.length || 0} екрана.`);
           break;
         }
+        case 'schedule':
+          openScheduleCampaignDialog(activeRequestId);
+          break;
+        case 'cancel-schedule': {
+          const requests = loadRequests();
+          const req = requests.find(x => x.id === activeRequestId);
+          if (req && req.status === 'scheduled'){
+            req.status = 'paid';
+            req.scheduledStartAt = null;
+            req.scheduledEndAt = null;
+            req.scheduledAt = null;
+            req.activeAt = null;
+            req.expiresAt = null;
+            req.assignedScreens = [];
+            req.screensAssignedAt = null;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+            renderAll();
+            openRequest(activeRequestId, false);
+            toast('Планирането е отменено. Заявката остава платена.');
+          }
+          break;
+        }
         case 'renew': {
-          renewCampaign(activeRequestId);
+          const result = renewCampaign(activeRequestId);
+          if (!result.ok){
+            if (result.type === 'capacity'){
+              const screen = screenById(result.screenId);
+              toast(`Не може да се удължи: „${screen?.name || 'Екран'}“ е пълен за ${conflictPeriodText(result.capacity)}.`);
+            } else toast('Кампанията не може да бъде удължена с текущите екрани.');
+            break;
+          }
           const renewed = loadRequests().find(x => x.id === activeRequestId);
           toast(`Удължена до ${formatDateOnly(renewed?.expiresAt)}.`);
           break;
         }
         case 'restart': {
-          if(!restartExpiredCampaign(activeRequestId)){
-            toast('Някой от избраните екрани вече е пълен или недостъпен. Избери свободни екрани.');
-            openScreenAssignmentDialog(activeRequestId);
+          const result = restartExpiredCampaign(activeRequestId);
+          if(!result.ok){
+            if (result.type === 'capacity'){
+              const screen = screenById(result.screenId);
+              toast(`„${screen?.name || 'Екран'}“ ще е пълен за ${conflictPeriodText(result.capacity)}. Новият старт е отказан.`);
+            } else toast('Някой от избраните екрани е недостъпен. Избери свободни екрани.');
+            openScreenAssignmentDialog(activeRequestId, false, {start:result.start || new Date(),end:result.end || addCalendarMonth(new Date())});
             break;
           }
           const restarted = loadRequests().find(x => x.id === activeRequestId);
