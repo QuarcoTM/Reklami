@@ -69,6 +69,12 @@
       status,
       active:status === 'published',
       yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
+      photo:screen?.photo && screen.photo.key ? {
+        key:String(screen.photo.key),
+        name:String(screen.photo.name || 'screen-photo'),
+        type:String(screen.photo.type || 'image/jpeg'),
+        size:Number(screen.photo.size || 0)
+      } : null,
       createdAt:screen?.createdAt || null,
       updatedAt:screen?.updatedAt || null
     };
@@ -432,6 +438,21 @@
     });
   }
 
+  async function deleteStoredFile(key){
+    if (!key) return true;
+    try{
+      const db = await openDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(FILE_STORE, 'readwrite');
+        tx.objectStore(FILE_STORE).delete(key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }catch{
+      return false;
+    }
+  }
+
   async function getStoredFile(key){
     if (!key) return null;
     try{
@@ -519,20 +540,31 @@
       : 'all';
   }
 
+  let screenReturnScrollY = 0;
+
+  function rememberScreenReturnPosition(){
+    screenReturnScrollY = window.scrollY || window.pageYOffset || 0;
+  }
+
+  function restoreScreenReturnPosition(){
+    const y = screenReturnScrollY;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    });
+  }
+
+  function ensureScreensView(){
+    if (currentAdminState.view !== 'screens'){
+      navigateAdmin({view:'screens', statusFilter:'all', requestId:null});
+    }
+  }
+
   function screenOverlayIsOpen(){
     return Boolean(
       document.getElementById('screenPlaylistDialog')?.classList.contains('show') ||
       document.getElementById('screenManageDialog')?.classList.contains('show') ||
       document.getElementById('deleteScreenDialog')?.classList.contains('show')
     );
-  }
-
-  function returnToScreensWithoutTrailChange(){
-    const next = {view:'screens', statusFilter:'all', requestId:null};
-    currentAdminState = normalizeAdminState(next);
-    setView('screens');
-    closeRequestDirect();
-    updateAdminBackButton();
   }
 
   function closeTopAdminOverlayForBack(){
@@ -542,9 +574,19 @@
       return true;
     }
 
+    const manage = document.getElementById('screenManageDialog');
+    if (manage?.classList.contains('show')){
+      closeScreenManageDialog();
+      return true;
+    }
+
+    const del = document.getElementById('deleteScreenDialog');
+    if (del?.classList.contains('show')){
+      closeDeleteScreenDialog();
+      return true;
+    }
+
     const modalIds = [
-      'screenManageDialog',
-      'deleteScreenDialog',
       'internalAdDialog',
       'screenAssignmentDialog',
       'creativeUploadDialog',
@@ -554,7 +596,7 @@
     for (const id of modalIds){
       const dialog = document.getElementById(id);
       if (!dialog?.classList.contains('show')) continue;
-      const closeButton = dialog.querySelector('.change-dialog-close, [data-screen-manage-cancel], [data-delete-screen-cancel]');
+      const closeButton = dialog.querySelector('.change-dialog-close');
       if (closeButton) closeButton.click();
       else dialog.classList.remove('show');
       return true;
@@ -617,11 +659,10 @@
     }
 
     if (!adminTrail.length) {
-      // At the Admin root there is nowhere internal to go back to.
-      // Stay on Dashboard; leaving Admin is explicit via the logo/site link.
       if (!sameAdminState(currentAdminState, {view:'dashboard',statusFilter:'all',requestId:null})) {
         applyAdminState({view:'dashboard',statusFilter:'all',requestId:null});
       }
+      updateAdminBackButton();
       return;
     }
 
@@ -850,12 +891,90 @@
       </article>`).join('');
   }
 
-  function openScreenDialog(id=null){
-    if (currentAdminState.view !== 'screens') {
-      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
-    } else {
-      returnToScreensWithoutTrailChange();
+  let screenEditorPreviewUrl = null;
+
+  function clearScreenEditorPreviewUrl(){
+    if (screenEditorPreviewUrl){
+      URL.revokeObjectURL(screenEditorPreviewUrl);
+      screenEditorPreviewUrl = null;
     }
+  }
+
+  function setScreenEditorPreviewEmpty(){
+    const dialog = document.getElementById('screenManageDialog');
+    if (!dialog) return;
+    clearScreenEditorPreviewUrl();
+    dialog.querySelector('#screenPhotoPreview').innerHTML = `
+      <div class="screen-photo-empty">
+        <span>▧</span>
+        <strong>Няма снимка</strong>
+        <small>Качи снимка на реалната локация или на монтирания екран.</small>
+      </div>`;
+    dialog.querySelector('#screenPhotoRemove').hidden = true;
+  }
+
+  async function loadExistingScreenPhotoPreview(screen){
+    const dialog = document.getElementById('screenManageDialog');
+    if (!dialog) return;
+
+    clearScreenEditorPreviewUrl();
+
+    if (!screen?.photo?.key){
+      setScreenEditorPreviewEmpty();
+      return;
+    }
+
+    dialog.querySelector('#screenPhotoPreview').innerHTML =
+      '<div class="screen-photo-loading">Зареждане на снимката…</div>';
+    dialog.querySelector('#screenPhotoRemove').hidden = false;
+
+    const record = await getStoredFile(screen.photo.key);
+    if (!dialog.classList.contains('show')) return;
+
+    if (!record?.blob){
+      dialog.querySelector('#screenPhotoPreview').innerHTML = `
+        <div class="screen-photo-empty">
+          <span>▧</span>
+          <strong>${esc(screen.photo.name || 'Снимка')}</strong>
+          <small>Файлът не е наличен в този demo браузър.</small>
+        </div>`;
+      return;
+    }
+
+    screenEditorPreviewUrl = URL.createObjectURL(record.blob);
+    dialog.querySelector('#screenPhotoPreview').innerHTML =
+      `<img src="${screenEditorPreviewUrl}" alt="Снимка на локацията">`;
+  }
+
+  function previewSelectedScreenPhoto(file){
+    const dialog = document.getElementById('screenManageDialog');
+    if (!dialog || !file) return;
+
+    clearScreenEditorPreviewUrl();
+    screenEditorPreviewUrl = URL.createObjectURL(file);
+    dialog.querySelector('#screenPhotoPreview').innerHTML =
+      `<img src="${screenEditorPreviewUrl}" alt="Нова снимка на локацията">`;
+    dialog.querySelector('#screenPhotoRemove').hidden = false;
+    dialog.querySelector('#screenPhotoChoose').textContent = 'Смени снимката';
+  }
+
+  function closeScreenManageDialog(){
+    const dialog = document.getElementById('screenManageDialog');
+    if (!dialog || !dialog.classList.contains('show')) return;
+
+    dialog.classList.remove('show');
+    dialog.dataset.screenId = '';
+    dialog.dataset.removePhoto = '0';
+    dialog.querySelector('#screenManagePhoto').value = '';
+    clearScreenEditorPreviewUrl();
+    unlockAdminPageScroll();
+    restoreScreenReturnPosition();
+    updateAdminBackButton();
+  }
+
+  function openScreenDialog(id=null){
+    ensureScreensView();
+    rememberScreenReturnPosition();
 
     const existing = id ? screenById(id) : null;
 
@@ -887,6 +1006,24 @@
               <input id="screenManageDescription" type="text" placeholder="Напр. бул. България 12 · витрина">
             </label>
 
+            <div class="screen-photo-field">
+              <div class="screen-photo-field-head">
+                <div>
+                  <span class="internal-ad-label">Снимка на локацията / екрана <small>(по желание)</small></span>
+                  <small>JPG или PNG · до 12 MB</small>
+                </div>
+              </div>
+
+              <input id="screenManagePhoto" type="file" accept="image/jpeg,image/png" hidden>
+
+              <div id="screenPhotoPreview" class="screen-photo-editor-preview"></div>
+
+              <div class="screen-photo-actions">
+                <button type="button" class="btn btn-light" id="screenPhotoChoose">Качи снимка</button>
+                <button type="button" class="btn btn-danger" id="screenPhotoRemove" hidden>Премахни снимката</button>
+              </div>
+            </div>
+
             <label>
               <span>Yodeck Player ID <small>(по желание, за по-късно)</small></span>
               <input id="screenManageYodeck" type="text" placeholder="Ще го добавим след свързване с Yodeck">
@@ -902,28 +1039,61 @@
         </section>`;
       document.body.appendChild(dialog);
 
-      const close = () => {
-        if (!dialog.classList.contains('show')) return;
-        dialog.classList.remove('show');
-        dialog.dataset.screenId = '';
-        unlockAdminPageScroll();
-        returnToScreensWithoutTrailChange();
-      };
-
-      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('.change-dialog-close').addEventListener('click', closeScreenManageDialog);
       dialog.querySelector('[data-screen-manage-cancel]').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        close();
+        closeScreenManageDialog();
       });
-      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+      dialog.addEventListener('click', e => {
+        if (e.target === dialog) closeScreenManageDialog();
+      });
 
-      dialog.querySelector('[data-screen-manage-save]').addEventListener('click', () => {
+      dialog.querySelector('#screenPhotoChoose').addEventListener('click', () => {
+        dialog.querySelector('#screenManagePhoto').click();
+      });
+
+      dialog.querySelector('#screenManagePhoto').addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        const error = dialog.querySelector('#screenManageError');
+        error.hidden = true;
+        if (!file) return;
+
+        if (!['image/jpeg','image/png'].includes(file.type)){
+          e.target.value = '';
+          error.textContent = 'Снимката трябва да е JPG или PNG.';
+          error.hidden = false;
+          return;
+        }
+        if (file.size > 12 * 1024 * 1024){
+          e.target.value = '';
+          error.textContent = 'Снимката е по-голяма от 12 MB.';
+          error.hidden = false;
+          return;
+        }
+
+        dialog.dataset.removePhoto = '0';
+        previewSelectedScreenPhoto(file);
+      });
+
+      dialog.querySelector('#screenPhotoRemove').addEventListener('click', () => {
+        dialog.dataset.removePhoto = '1';
+        dialog.querySelector('#screenManagePhoto').value = '';
+        dialog.querySelector('#screenPhotoChoose').textContent = 'Качи снимка';
+        setScreenEditorPreviewEmpty();
+      });
+
+      dialog.querySelector('[data-screen-manage-save]').addEventListener('click', async () => {
         const screenId = dialog.dataset.screenId || '';
         const name = dialog.querySelector('#screenManageName').value.trim();
         const description = dialog.querySelector('#screenManageDescription').value.trim();
         const yodeckPlayerId = dialog.querySelector('#screenManageYodeck').value.trim();
+        const photoFile = dialog.querySelector('#screenManagePhoto').files?.[0] || null;
+        const removePhoto = dialog.dataset.removePhoto === '1';
         const error = dialog.querySelector('#screenManageError');
+        const saveBtn = dialog.querySelector('[data-screen-manage-save]');
+
+        error.hidden = true;
 
         if (!name){
           error.textContent = 'Напиши име на екрана.';
@@ -939,43 +1109,100 @@
           return;
         }
 
-        if (screenId){
-          const target = screens.find(s => s.id === screenId);
-          if (!target) return;
-          target.name = name;
-          target.description = description;
-          target.yodeckPlayerId = yodeckPlayerId;
-          target.updatedAt = new Date().toISOString();
-        }else{
-          const now = new Date().toISOString();
-          screens.push({
-            id:makeScreenId(),
-            name,
-            description,
-            status:'hidden',
-            active:false,
-            yodeckPlayerId,
-            createdAt:now,
-            updatedAt:now
-          });
-        }
+        saveBtn.disabled = true;
+        const oldLabel = saveBtn.textContent;
+        saveBtn.textContent = 'Запазване…';
 
-        saveScreenCatalog(screens);
-        close();
-        renderAll();
-        toast(screenId ? 'Екранът е обновен.' : 'Новият екран е добавен.');
+        try{
+          let oldPhoto = null;
+          let newPhoto = null;
+
+          if (screenId){
+            const current = screens.find(s => s.id === screenId);
+            oldPhoto = current?.photo || null;
+            newPhoto = oldPhoto;
+          }
+
+          if (removePhoto){
+            if (oldPhoto?.key) await deleteStoredFile(oldPhoto.key);
+            newPhoto = null;
+          }
+
+          if (photoFile){
+            const key = `screen-photo-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+            await putStoredFile({
+              key,
+              blob:photoFile,
+              name:photoFile.name,
+              type:photoFile.type,
+              size:photoFile.size,
+              createdAt:new Date().toISOString()
+            });
+            if (oldPhoto?.key && oldPhoto.key !== key) await deleteStoredFile(oldPhoto.key);
+            newPhoto = {
+              key,
+              name:photoFile.name,
+              type:photoFile.type,
+              size:photoFile.size
+            };
+          }
+
+          if (screenId){
+            const target = screens.find(s => s.id === screenId);
+            if (!target) throw new Error('Screen not found');
+            target.name = name;
+            target.description = description;
+            target.yodeckPlayerId = yodeckPlayerId;
+            target.photo = newPhoto;
+            target.updatedAt = new Date().toISOString();
+          }else{
+            const now = new Date().toISOString();
+            screens.push({
+              id:makeScreenId(),
+              name,
+              description,
+              status:'hidden',
+              active:false,
+              yodeckPlayerId,
+              photo:newPhoto,
+              createdAt:now,
+              updatedAt:now
+            });
+          }
+
+          saveScreenCatalog(screens);
+          renderInternalAds();
+          renderScreens();
+          closeScreenManageDialog();
+          toast(screenId ? 'Екранът е обновен.' : 'Новият екран е добавен.');
+        }catch(err){
+          console.error(err);
+          error.textContent = 'Екранът не можа да бъде запазен. Опитай отново.';
+          error.hidden = false;
+        }finally{
+          saveBtn.disabled = false;
+          saveBtn.textContent = oldLabel;
+        }
       });
     }
 
     dialog.dataset.screenId = existing?.id || '';
+    dialog.dataset.removePhoto = '0';
     dialog.querySelector('#screenManageTitle').textContent = existing ? 'Редактирай екран' : 'Добави екран';
     dialog.querySelector('#screenManageName').value = existing?.name || '';
     dialog.querySelector('#screenManageDescription').value = existing?.description || '';
     dialog.querySelector('#screenManageYodeck').value = existing?.yodeckPlayerId || '';
+    dialog.querySelector('#screenManagePhoto').value = '';
     dialog.querySelector('#screenManageError').hidden = true;
+    dialog.querySelector('#screenPhotoChoose').textContent = existing?.photo ? 'Смени снимката' : 'Качи снимка';
 
     lockAdminPageScroll();
     dialog.classList.add('show');
+    updateAdminBackButton();
+
+    if (existing?.photo) loadExistingScreenPhotoPreview(existing);
+    else setScreenEditorPreviewEmpty();
+
     requestAnimationFrame(() => dialog.querySelector('#screenManageName')?.focus());
   }
 
@@ -999,12 +1226,19 @@
     if (status === 'stopped') toast('Екранът е временно спрян. Настройките и playlist-ът са запазени.');
   }
 
+  function closeDeleteScreenDialog(){
+    const dialog = document.getElementById('deleteScreenDialog');
+    if (!dialog || !dialog.classList.contains('show')) return;
+    dialog.classList.remove('show');
+    dialog.dataset.screenId = '';
+    unlockAdminPageScroll();
+    restoreScreenReturnPosition();
+    updateAdminBackButton();
+  }
+
   function openDeleteScreenDialog(id){
-    if (currentAdminState.view !== 'screens') {
-      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
-    } else {
-      returnToScreensWithoutTrailChange();
-    }
+    ensureScreensView();
+    rememberScreenReturnPosition();
 
     const screen = screenById(id);
     if (!screen) return;
@@ -1035,27 +1269,21 @@
         </section>`;
       document.body.appendChild(dialog);
 
-      const close = () => {
-        if (!dialog.classList.contains('show')) return;
-        dialog.classList.remove('show');
-        dialog.dataset.screenId = '';
-        unlockAdminPageScroll();
-        returnToScreensWithoutTrailChange();
-      };
-
-      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('.change-dialog-close').addEventListener('click', closeDeleteScreenDialog);
       dialog.querySelector('[data-delete-screen-cancel]').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        close();
+        closeDeleteScreenDialog();
       });
-      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+      dialog.addEventListener('click', e => {
+        if (e.target === dialog) closeDeleteScreenDialog();
+      });
 
-      dialog.querySelector('[data-delete-screen-confirm]').addEventListener('click', () => {
+      dialog.querySelector('[data-delete-screen-confirm]').addEventListener('click', async () => {
         const screenId = dialog.dataset.screenId;
         const current = screenById(screenId);
         if (!current) {
-          close();
+          closeDeleteScreenDialog();
           return;
         }
 
@@ -1070,9 +1298,11 @@
           return;
         }
 
+        if (current.photo?.key) await deleteStoredFile(current.photo.key);
         saveScreenCatalog(loadScreenCatalog().filter(s => s.id !== screenId));
-        close();
-        renderAll();
+        renderInternalAds();
+        renderScreens();
+        closeDeleteScreenDialog();
         toast('Екранът е изтрит.');
       });
     }
@@ -1095,6 +1325,7 @@
 
     lockAdminPageScroll();
     dialog.classList.add('show');
+    updateAdminBackButton();
   }
 
   function renderInternalAds(){
@@ -1275,7 +1506,11 @@
 
       return `
         <article class="screen-card panel ${cardClass}">
-          <div class="screen-preview"><div class="fake-tv"><span>${screenLabelHTML(screen)}</span></div></div>
+          <div class="screen-preview ${screen.photo?.key ? 'has-location-photo' : ''}" ${screen.photo?.key ? `data-screen-photo="${esc(screen.id)}"` : ''}>
+            ${screen.photo?.key
+              ? `<div class="screen-location-photo-loading"><span>▧</span><small>${esc(screen.photo.name || 'Снимка')}</small></div>`
+              : `<div class="fake-tv"><span>${screenLabelHTML(screen)}</span></div>`}
+          </div>
           <div class="screen-meta">
             <div class="screen-card-top">
               <span class="status-pill ${statusClass}">
@@ -1328,6 +1563,36 @@
           </div>
         </article>`;
     }).join('');
+    renderScreenCardPhotos();
+  }
+
+  let screenCardPhotoUrls = [];
+
+  async function renderScreenCardPhotos(){
+    screenCardPhotoUrls.forEach(url => URL.revokeObjectURL(url));
+    screenCardPhotoUrls = [];
+
+    const boxes = [...document.querySelectorAll('[data-screen-photo]')];
+    for (const box of boxes){
+      const screen = screenById(box.dataset.screenPhoto);
+      if (!screen?.photo?.key) continue;
+
+      const record = await getStoredFile(screen.photo.key);
+      if (!box.isConnected) continue;
+
+      if (!record?.blob){
+        box.innerHTML = `
+          <div class="screen-location-photo-loading missing">
+            <span>▧</span>
+            <small>Снимката не е на това устройство</small>
+          </div>`;
+        continue;
+      }
+
+      const url = URL.createObjectURL(record.blob);
+      screenCardPhotoUrls.push(url);
+      box.innerHTML = `<img src="${url}" alt="Снимка на ${esc(screen.name)}">`;
+    }
   }
 
   let activePlaylistScreenId = null;
@@ -1341,7 +1606,8 @@
     playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
     playlistPreviewUrls = [];
     unlockAdminPageScroll();
-    returnToScreensWithoutTrailChange();
+    restoreScreenReturnPosition();
+    updateAdminBackButton();
   }
 
   function ensurePlaylistDialog(){
@@ -1420,14 +1686,11 @@
   }
 
   function renderScreenPlaylist(screenId){
+    ensureScreensView();
+    rememberScreenReturnPosition();
+
     const screen = screenById(screenId);
     if (!screen) return;
-
-    if (currentAdminState.view !== 'screens') {
-      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
-    } else {
-      returnToScreensWithoutTrailChange();
-    }
 
     activePlaylistScreenId = screenId;
     const dialog = ensurePlaylistDialog();
