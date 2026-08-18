@@ -51,6 +51,10 @@
     city: 'CITY'
   };
 
+  const FIXED_SLOT_SECONDS = 10;
+  const CLIENT_SLOT_LIMIT = 9;
+  const HOUSE_SLOT_LIMIT = 1;
+
   const DEFAULT_SCREEN_CATALOG = [
     {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:''},
     {id:'pharmacy', name:'Аптека', description:'Планирана локация.', active:true, yodeckPlayerId:''},
@@ -270,6 +274,59 @@
     return SCREEN_CATALOG.filter(screen => isScreenPublished(screen) || current.has(screen.id));
   }
 
+  function requestOccupiesClientSlot(r){
+    return Boolean(r) && !['done','rejected'].includes(String(r.status || ''));
+  }
+
+  function screenClientReservations(screenId, excludeRequestId=null){
+    return loadRequests().filter(r =>
+      r.id !== excludeRequestId &&
+      requestOccupiesClientSlot(r) &&
+      (r.assignedScreens || []).includes(screenId)
+    );
+  }
+
+  function screenClientCapacity(screenId, excludeRequestId=null){
+    const occupied = screenClientReservations(screenId, excludeRequestId).length;
+    return {
+      occupied,
+      limit:CLIENT_SLOT_LIMIT,
+      remaining:Math.max(0, CLIENT_SLOT_LIMIT - occupied),
+      full:occupied >= CLIENT_SLOT_LIMIT,
+      almostFull:occupied === CLIENT_SLOT_LIMIT - 1
+    };
+  }
+
+  function screenHouseReservations(screenId, excludeAdId=null){
+    return loadInternalAds().filter(ad =>
+      ad.id !== excludeAdId &&
+      ad.active !== false &&
+      (ad.assignedScreens || []).includes(screenId)
+    );
+  }
+
+  function screenHouseCapacity(screenId, excludeAdId=null){
+    const occupied = screenHouseReservations(screenId, excludeAdId).length;
+    return {
+      occupied,
+      limit:HOUSE_SLOT_LIMIT,
+      remaining:Math.max(0, HOUSE_SLOT_LIMIT - occupied),
+      full:occupied >= HOUSE_SLOT_LIMIT
+    };
+  }
+
+  function screenCapacityLabel(capacity){
+    if (capacity.full) return 'ПЪЛЕН';
+    if (capacity.almostFull) return 'ПОЧТИ ПЪЛЕН';
+    return 'СВОБОДЕН';
+  }
+
+  function screenCapacityClass(capacity){
+    if (capacity.full) return 'is-full';
+    if (capacity.almostFull) return 'is-almost-full';
+    return 'is-available';
+  }
+
   function screenLabelHTML(screen){
     return esc(screen?.name || 'Екран').replace(/\s+/g,'<br>');
   }
@@ -289,17 +346,23 @@
   }
 
   function screenLimitText(r){
-    if (r.package === 'single') return 'SINGLE: избери точно 1 публикуван екран.';
-    if (r.package === 'local') return 'LOCAL: избери от 1 до 3 публикувани екрана.';
+    const capacityNote = ` Всеки екран има максимум ${CLIENT_SLOT_LIMIT} клиентски позиции по ${FIXED_SLOT_SECONDS} сек.; пълен екран не може да бъде избран.`;
+    if (r.package === 'single') return 'SINGLE: избери точно 1 публикуван екран.' + capacityNote;
+    if (r.package === 'local') return 'LOCAL: избери от 1 до 3 публикувани екрана.' + capacityNote;
     const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
-    return activeCount >= 4
+    return (activeCount >= 4
       ? 'CITY: избери 4 или 5 публикувани екрана.'
-      : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните публикувани екрани.';
+      : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните публикувани екрани.') + capacityNote;
   }
 
   function screenSelectionValidForActivation(r){
-    const valid = (r.assignedScreens || []).filter(id => isScreenPublished(screenById(id)));
+    const assigned = r.assignedScreens || [];
+    const valid = assigned.filter(id => isScreenPublished(screenById(id)));
     const count = valid.length;
+
+    if (valid.length !== assigned.length) return false;
+    if (valid.some(id => screenClientCapacity(id, r.id).full)) return false;
+
     if (r.package === 'single') return count === 1;
     if (r.package === 'local') return count >= 1 && count <= 3;
     const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
@@ -310,7 +373,7 @@
   function getScreenSetting(r, screenId){
     const saved = r?.screenSettings?.[screenId] || {};
     return {
-      duration: [8,9,10].includes(Number(saved.duration)) ? Number(saved.duration) : 10,
+      duration: FIXED_SLOT_SECONDS,
       paused: Boolean(saved.paused),
       order: (saved.order === null || saved.order === undefined || saved.order === '') ? null : (Number.isFinite(Number(saved.order)) ? Number(saved.order) : null)
     };
@@ -334,13 +397,13 @@
           changed = true;
         }
         if (!r.screenSettings[screenId]) {
-          r.screenSettings[screenId] = {duration:10, paused:false, order:nextOrder++};
+          r.screenSettings[screenId] = {duration:FIXED_SLOT_SECONDS, paused:false, order:nextOrder++};
           changed = true;
           return;
         }
         const current = r.screenSettings[screenId];
-        if (![8,9,10].includes(Number(current.duration))) {
-          current.duration = 10;
+        if (Number(current.duration) !== FIXED_SLOT_SECONDS) {
+          current.duration = FIXED_SLOT_SECONDS;
           changed = true;
         }
         if (typeof current.paused !== 'boolean') {
@@ -439,11 +502,11 @@
         if (!item.screenSettings) item.screenSettings = {};
         const current = item.screenSettings[screenId];
         if (!current){
-          item.screenSettings[screenId] = {duration:Number(item.duration)||10, paused:false, order:next++};
+          item.screenSettings[screenId] = {duration:FIXED_SLOT_SECONDS, paused:false, order:next++};
           savePlaylistItem(item);
         } else {
           let changed = false;
-          if (![8,9,10].includes(Number(current.duration))){ current.duration = Number(item.duration)||10; changed = true; }
+          if (Number(current.duration) !== FIXED_SLOT_SECONDS){ current.duration = FIXED_SLOT_SECONDS; changed = true; }
           if (typeof current.paused !== 'boolean'){ current.paused = false; changed = true; }
           if (!Number.isFinite(Number(current.order))){ current.order = next++; changed = true; }
           if (changed) savePlaylistItem(item);
@@ -1999,7 +2062,10 @@
           <div class="internal-ad-form">
             <label><span>Име на рекламата <b class="admin-required-star">*</b></span><input id="internalAdTitle" type="text" placeholder="Напр. Рекламирай тук"></label>
             <div><span class="internal-ad-label">Екрани <b class="admin-required-star">*</b></span><div id="internalAdScreens" class="screen-assignment-options"></div></div>
-            <label><span>Времетраене <b class="admin-required-star">*</b></span><select id="internalAdDuration"><option value="8">8 сек.</option><option value="9">9 сек.</option><option value="10">10 сек.</option></select></label>
+            <div class="fixed-slot-field">
+              <span>Времетраене</span>
+              <strong>10 сек. · фиксиран слот</strong>
+            </div>
             <div>
               <span class="internal-ad-label" id="internalAdFileRequirement">Рекламен файл <b class="admin-required-star">*</b></span>
               <label class="creative-upload-drop">
@@ -2058,12 +2124,22 @@
         const current=adId?ads.find(ad=>ad.id===adId):null;
         const title=dialog.querySelector('#internalAdTitle').value.trim();
         const screens=[...dialog.querySelectorAll('input[name="internalAdScreen"]:checked')].map(i=>i.value);
-        const duration=Number(dialog.querySelector('#internalAdDuration').value);
+        const duration=FIXED_SLOT_SECONDS;
         const file=dialog.querySelector('#internalAdFile').files?.[0];
         const error=dialog.querySelector('#internalAdError');
 
         if(!title){ error.textContent='Напиши име на рекламата.'; error.hidden=false; return; }
         if(!screens.length){ error.textContent='Избери поне един екран.'; error.hidden=false; return; }
+
+        const blockedHouseScreen = screens
+          .map(screenId => ({screen:screenById(screenId), capacity:screenHouseCapacity(screenId, current?.id || null)}))
+          .find(x => x.capacity.full);
+        if(blockedHouseScreen){
+          error.textContent=`„${blockedHouseScreen.screen?.name || 'Екран'}“ вече има 1/1 собствена рекламна позиция. Редактирай или премахни текущата собствена реклама.`;
+          error.hidden=false;
+          return;
+        }
+
         if(!current&&!file){ error.textContent='Избери JPG, PNG или MP4.'; error.hidden=false; return; }
         if(file&&!dialog._internalAdValidation){
           error.textContent='Изчакай проверката на файла.';
@@ -2094,17 +2170,17 @@
         }
 
         if(current){
-          current.title=title; current.assignedScreens=screens; current.duration=duration; current.file=storedFile; current.updatedAt=new Date().toISOString();
+          current.title=title; current.assignedScreens=screens; current.duration=FIXED_SLOT_SECONDS; current.file=storedFile; current.updatedAt=new Date().toISOString();
           if(!current.screenSettings) current.screenSettings={};
           Object.keys(current.screenSettings).forEach(screenId=>{ if(!screens.includes(screenId)) delete current.screenSettings[screenId]; });
           screens.forEach(screenId=>{
             const setting=getScreenSetting(current,screenId);
-            current.screenSettings[screenId]={...setting,duration};
+            current.screenSettings[screenId]={...setting,duration:FIXED_SLOT_SECONDS};
           });
         }else{
           const now=new Date().toISOString();
-          const ad={id:makeInternalAdId(),internalAd:true,title,assignedScreens:screens,duration,file:storedFile,active:true,createdAt:now,updatedAt:now,screenSettings:{}};
-          screens.forEach(screenId=>{ ad.screenSettings[screenId]={duration,paused:false,order:null}; });
+          const ad={id:makeInternalAdId(),internalAd:true,title,assignedScreens:screens,duration:FIXED_SLOT_SECONDS,file:storedFile,active:true,createdAt:now,updatedAt:now,screenSettings:{}};
+          screens.forEach(screenId=>{ ad.screenSettings[screenId]={duration:FIXED_SLOT_SECONDS,paused:false,order:null}; });
           ads.unshift(ad);
         }
         saveInternalAds(ads);
@@ -2117,7 +2193,6 @@
     dialog.dataset.adId=existing?.id||'';
     dialog.querySelector('#internalAdDialogTitle').textContent=existing?'Редактирай собствена реклама':'Добави собствена реклама';
     dialog.querySelector('#internalAdTitle').value=existing?.title||'';
-    dialog.querySelector('#internalAdDuration').value=String(existing?.duration||10);
     dialog.querySelector('#internalAdFile').value='';
     dialog._internalAdValidation=null;
     dialog.querySelector('#internalAdFileLabel').textContent=existing?'Смени файла (по желание)':'Избери JPG, PNG или MP4';
@@ -2131,8 +2206,19 @@
     existingFile.hidden=!existing?.file;
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
     const selected=new Set(existing?.assignedScreens||[]);
-    dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>`
-      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''}"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${!isScreenPublished(screen)?'disabled':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:''}</strong><small>${esc(screen.description||'Без описание')}</small></span></label>`).join('');
+    dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>{
+      const houseCapacity=screenHouseCapacity(screen.id, existing?.id || null);
+      const disabled=!isScreenPublished(screen) || houseCapacity.full;
+      return `
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${houseCapacity.full?'is-screen-full':''}">
+        <input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${disabled?'disabled':''}>
+        <span class="screen-option-check">✓</span>
+        <span class="screen-option-copy">
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:houseCapacity.full?' · СОБСТВЕН СЛОТ ПЪЛЕН':''}</strong>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · Наша позиция ${houseCapacity.occupied}/${HOUSE_SLOT_LIMIT}</small>
+        </span>
+      </label>`;
+    }).join('');
     lockAdminPageScroll();
     dialog.classList.add('show');
     requestAnimationFrame(() => {
@@ -2143,7 +2229,23 @@
 
   function toggleInternalAd(id){
     const ads=loadInternalAds(); const ad=ads.find(x=>x.id===id); if(!ad)return;
-    ad.active=ad.active===false; ad.updatedAt=new Date().toISOString(); saveInternalAds(ads);
+
+    if(ad.active===false){
+      const blocked=(ad.assignedScreens||[])
+        .map(screenId=>({screen:screenById(screenId),capacity:screenHouseCapacity(screenId,ad.id)}))
+        .find(x=>x.capacity.full);
+      if(blocked){
+        toast(`„${blocked.screen?.name || 'Екран'}“ вече има 1/1 собствена реклама. Първо освободи собствената позиция.`);
+        return;
+      }
+      ad.active=true;
+    }else{
+      ad.active=false;
+    }
+
+    ad.duration=FIXED_SLOT_SECONDS;
+    ad.updatedAt=new Date().toISOString();
+    saveInternalAds(ads);
     renderInternalAds(); renderScreens(); if(activePlaylistScreenId) renderScreenPlaylist(activePlaylistScreenId);
     toast(ad.active?'Собствената реклама е включена.':'Собствената реклама е спряна.');
   }
@@ -2170,6 +2272,8 @@
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
       const rotationStats = screenRotationStats(screen.id);
       const readiness = screenReadiness(screen.id);
+      const clientCapacity = screenClientCapacity(screen.id);
+      const houseCapacity = screenHouseCapacity(screen.id);
 
       const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
       const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
@@ -2199,6 +2303,18 @@
             <div class="screen-summary-grid">
               <div><span>Цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
               <div><span>Пауза</span><strong>${paused}</strong></div>
+            </div>
+
+            <div class="screen-capacity-card ${screenCapacityClass(clientCapacity)}">
+              <div class="screen-capacity-head">
+                <span><small>Клиентски позиции</small><strong>${clientCapacity.occupied}/${CLIENT_SLOT_LIMIT}</strong></span>
+                <b>${screenCapacityLabel(clientCapacity)}</b>
+              </div>
+              <div class="screen-capacity-progress"><i style="width:${Math.min(100,(clientCapacity.occupied/CLIENT_SLOT_LIMIT)*100)}%"></i></div>
+              <div class="screen-capacity-foot">
+                <span>Наша позиция: ${houseCapacity.occupied}/${HOUSE_SLOT_LIMIT}</span>
+                <span>Макс. цикъл: ${(CLIENT_SLOT_LIMIT + HOUSE_SLOT_LIMIT) * FIXED_SLOT_SECONDS} сек.</span>
+              </div>
             </div>
 
             <div class="screen-rotation-mini">
@@ -2425,7 +2541,7 @@
         : screen.status === 'stopped'
           ? 'Екранът е временно спрян. Playlist-ът е запазен, но нищо не се счита за излъчвано.'
           : (items.length
-            ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
+            ? 'Подреди рекламите и при нужда спри само една реклама на този екран. Всеки слот е фиксиран на 10 сек.'
             : 'Няма активни кампании, разпределени към този екран.');
 
     const stats = screenRotationStats(screenId);
@@ -2515,14 +2631,10 @@
               `}
 
               <div class="playlist-controls">
-                <label>
+                <div class="playlist-fixed-duration">
                   <span>Времетраене</span>
-                  <select data-playlist-duration="${esc(r.id)}">
-                    <option value="8" ${setting.duration===8?'selected':''}>8 сек.</option>
-                    <option value="9" ${setting.duration===9?'selected':''}>9 сек.</option>
-                    <option value="10" ${setting.duration===10?'selected':''}>10 сек.</option>
-                  </select>
-                </label>
+                  <strong>10 сек. · фиксирано</strong>
+                </div>
 
                 <button type="button"
                   class="btn ${setting.paused ? 'btn-success' : 'btn-warning'}"
@@ -2979,8 +3091,8 @@
     }
     if(file.type==='video/mp4' && meta.duration!=null){
       result.details.push(`${meta.duration.toFixed(1)} сек.`);
-      if(meta.duration<8 || meta.duration>10){
-        result.warnings.push(`Видеото е ${meta.duration.toFixed(1)} сек. Препоръчителната дължина е 8–10 сек.`);
+      if(meta.duration < 9.5 || meta.duration > 10.5){
+        result.warnings.push(`Видеото е ${meta.duration.toFixed(1)} сек. Рекламният слот е фиксиран на 10 сек.`);
       }
     }
 
@@ -3269,7 +3381,9 @@
   function restartExpiredCampaign(id){
     const requests = syncCampaignLifecycle();
     const r = requests.find(x => x.id === id);
-    if (!r) return;
+    if (!r) return false;
+
+    if (!screenSelectionValidForActivation(r)) return false;
 
     const now = new Date();
     r.status = 'active';
@@ -3288,6 +3402,7 @@
 
     saveRequests(requests);
     openRequest(id, false);
+    return true;
   }
 
   function openScreenAssignmentDialog(id, restoring=false){
@@ -3343,6 +3458,15 @@
           error.hidden = false;
           return;
         }
+
+        const blockedScreen = selected
+          .map(screenId => ({screen:screenById(screenId), capacity:screenClientCapacity(screenId, req.id)}))
+          .find(x => x.capacity.full);
+        if(blockedScreen){
+          error.textContent = `„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${CLIENT_SLOT_LIMIT}/${CLIENT_SLOT_LIMIT} клиентски позиции. Избери друг екран.`;
+          error.hidden = false;
+          return;
+        }
         if (req.package === 'single' && selected.length !== 1){
           error.textContent = 'Пакет SINGLE може да бъде разпределен само на 1 екран.';
           error.hidden = false;
@@ -3382,15 +3506,19 @@
     const inputType = r.package === 'single' ? 'radio' : 'checkbox';
     const options = dialog.querySelector('#screenAssignmentOptions');
 
-    options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => `
-      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''}">
-        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''} ${!isScreenPublished(screen)?'disabled':''}>
+    options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => {
+      const capacity=screenClientCapacity(screen.id,r.id);
+      const disabled=!isScreenPublished(screen) || capacity.full;
+      return `
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.full?'is-screen-full':''}">
+        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${disabled?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:''}</strong>
-          <small>${esc(screen.address || screen.description || 'Без адрес')}</small>
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:capacity.full?' · ПЪЛЕН':''}</strong>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · Клиентски позиции ${capacity.occupied}/${CLIENT_SLOT_LIMIT}${capacity.almostFull?' · последно свободно място':''}</small>
         </span>
-      </label>`).join('');
+      </label>`;
+    }).join('');
 
     if (r.package === 'local'){
       options.querySelectorAll('input').forEach(input => {
@@ -3797,7 +3925,11 @@
           break;
         }
         case 'restart': {
-          restartExpiredCampaign(activeRequestId);
+          if(!restartExpiredCampaign(activeRequestId)){
+            toast('Някой от избраните екрани вече е пълен или недостъпен. Избери свободни екрани.');
+            openScreenAssignmentDialog(activeRequestId);
+            break;
+          }
           const restarted = loadRequests().find(x => x.id === activeRequestId);
           toast(`Кампанията е пусната отново до ${formatDateOnly(restarted?.expiresAt)}.`);
           break;
@@ -3805,17 +3937,6 @@
         case 'done': updateStatus(activeRequestId,'done'); toast('Кампанията е приключена ръчно.'); break;
         case 'reopen': updateStatus(activeRequestId,'new'); toast('Заявката е върната като нова.'); break;
         case 'copy-payment': copyPaymentText(r); break;
-      }
-    }
-  });
-
-  document.addEventListener('change', e => {
-    const duration = e.target.closest('[data-playlist-duration]');
-    if (duration && activePlaylistScreenId){
-      const seconds = Number(duration.value);
-      if ([8,9,10].includes(seconds)){
-        updateScreenSetting(duration.dataset.playlistDuration, activePlaylistScreenId, {duration:seconds});
-        toast(`Времетраене: ${seconds} сек.`);
       }
     }
   });
