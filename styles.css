@@ -898,3 +898,65 @@ img{display:block;max-width:100%}
   .privacy-placeholder-grid,.legal-basis-grid,.retention-grid{grid-template-columns:1fr}
   .privacy-version{grid-template-columns:1fr}
 }
+
+
+/* v5.0 — automatic advertising file check */
+.ad-file-check{
+  margin-top:10px;
+  padding:12px 13px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  font-size:12px;
+  line-height:1.45;
+}
+.ad-file-check.checking{
+  background:#f7f7f5;
+  color:var(--muted);
+}
+.ad-file-check.ok{
+  background:#f1faf4;
+  border-color:#badfc5;
+  color:#1d6a36;
+}
+.ad-file-check.warning{
+  background:#fff9e8;
+  border-color:#ead599;
+  color:#806017;
+}
+.ad-file-check.error{
+  background:#fff2f2;
+  border-color:#ebbbbb;
+  color:#9a3030;
+}
+.ad-file-check-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.ad-file-check-head strong{
+  font-size:13px;
+}
+.ad-file-check-head span{
+  color:inherit;
+  opacity:.78;
+  text-align:right;
+  font-size:11px;
+}
+.ad-file-check-list{
+  display:grid;
+  gap:4px;
+  margin-top:7px;
+}
+.ad-file-check-list span{
+  display:block;
+}
+@media(max-width:620px){
+  .ad-file-check-head{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .ad-file-check-head span{
+    text-align:left;
+  }
+}
