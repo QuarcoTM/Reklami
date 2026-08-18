@@ -1,6 +1,6 @@
 
 (() => {
-  const KS_ADMIN_VERSION = '3.6.4';
+  const KS_ADMIN_VERSION = '3.6.5';
   window.KS_ADMIN_VERSION = KS_ADMIN_VERSION;
   const STORAGE_KEY = 'ks_demo_requests_v1';
   const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
@@ -3977,6 +3977,7 @@
       const close = () => {
         dialog.classList.remove('show');
         dialog.dataset.requestId = '';
+        unlockAdminPageScroll();
         clearAdminOverlay('campaign-schedule');
       };
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
@@ -4116,8 +4117,13 @@
     const existingStart = request.status === 'scheduled' ? parseLocalDateInput(localDateInputValue(request.scheduledStartAt)) : null;
     startInput.value = localDateInputValue(existingStart && existingStart >= minDate ? existingStart : minDate);
     dialog._renderScheduleOptions?.();
+    lockAdminPageScroll();
     dialog.classList.add('show');
-    if (!restoring) requestAnimationFrame(() => startInput.focus());
+    requestAnimationFrame(() => {
+      const panel = dialog.querySelector('.campaign-schedule-dialog');
+      if (panel) panel.scrollTop = 0;
+      if (!restoring) startInput.focus();
+    });
   }
 
   function openScreenAssignmentDialog(id, restoring=false, periodOverride=null){
@@ -4158,6 +4164,7 @@
       const close = () => {
         dialog.classList.remove('show');
         dialog.dataset.requestId = '';
+        unlockAdminPageScroll();
         clearAdminOverlay('screen-assignment');
       };
 
@@ -4287,7 +4294,12 @@
       });
     }
 
+    lockAdminPageScroll();
     dialog.classList.add('show');
+    requestAnimationFrame(() => {
+      const panel = dialog.querySelector('.screen-assignment-dialog');
+      if (panel) panel.scrollTop = 0;
+    });
   }
 
   function openCreativeUploadDialog(id, restoring=false){
@@ -4336,6 +4348,7 @@
 
       const close = () => {
         dialog.classList.remove('show');
+        unlockAdminPageScroll();
         clearAdminOverlay('creative-upload');
         dialog.dataset.requestId = '';
         dialog.querySelector('#creativeUploadFile').value = '';
@@ -4447,7 +4460,12 @@
     dialog.querySelector('#creativeUploadFileCheck').hidden = true;
     dialog.querySelector('#creativeUploadFileCheck').innerHTML = '';
     dialog.querySelector('#creativeUploadError').hidden = true;
+    lockAdminPageScroll();
     dialog.classList.add('show');
+    requestAnimationFrame(() => {
+      const panel = dialog.querySelector('.creative-upload-dialog');
+      if (panel) panel.scrollTop = 0;
+    });
   }
 
   function openChangeRequestDialog(id, restoring=false){
@@ -4492,6 +4510,7 @@
 
       const close = () => {
         dialog.classList.remove('show');
+        unlockAdminPageScroll();
         clearAdminOverlay('change-request');
         dialog.dataset.requestId = '';
       };
@@ -4540,8 +4559,13 @@
     const error = dialog.querySelector('#changeRequestError');
     textarea.value = r.changeRequestText || '';
     error.hidden = true;
+    lockAdminPageScroll();
     dialog.classList.add('show');
-    setTimeout(() => textarea.focus(), 50);
+    requestAnimationFrame(() => {
+      const panel = dialog.querySelector('.change-dialog');
+      if (panel) panel.scrollTop = 0;
+      if (!restoring) setTimeout(() => textarea.focus(), 50);
+    });
   }
 
   async function copyPaymentText(r){

@@ -2443,3 +2443,73 @@ body.admin-modal-open{
     }
   }
 }
+
+
+/* v3.6.5 — unified iPhone/mobile scrolling for ALL admin overlays
+   One scrolling model for every request action, screen editor, checklist,
+   internal ad, playlist and request drawer. Do not add one-off modal fixes. */
+.change-dialog-backdrop,
+.playlist-dialog-backdrop{
+  overflow:hidden!important;
+  overscroll-behavior:none;
+  touch-action:auto!important;
+}
+
+.change-dialog,
+.playlist-dialog{
+  min-height:0;
+  max-height:calc(100dvh - 36px)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y!important;
+  scrollbar-gutter:stable;
+}
+
+.request-drawer{
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+}
+.drawer-content{
+  min-height:0;
+  overflow-y:auto!important;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+
+@supports not (height:100dvh){
+  .change-dialog,
+  .playlist-dialog{
+    max-height:calc(100vh - 36px)!important;
+  }
+  .request-drawer{height:100vh;}
+}
+
+@media(max-width:600px){
+  .change-dialog-backdrop,
+  .playlist-dialog-backdrop{
+    padding:10px!important;
+    align-items:center!important;
+  }
+  .change-dialog,
+  .playlist-dialog{
+    max-height:calc(100dvh - 20px)!important;
+    padding-bottom:calc(22px + env(safe-area-inset-bottom))!important;
+  }
+  .drawer-content{
+    padding-bottom:calc(22px + env(safe-area-inset-bottom));
+  }
+  .drawer-actions{
+    padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  }
+  @supports not (height:100dvh){
+    .change-dialog,
+    .playlist-dialog{
+      max-height:calc(100vh - 20px)!important;
+    }
+  }
+}
