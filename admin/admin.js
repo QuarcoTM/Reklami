@@ -2,6 +2,21 @@
 (() => {
   const STORAGE_KEY = 'ks_demo_requests_v1';
   const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
+
+  let adminModalScrollY = 0;
+
+  function lockAdminPageScroll(){
+    adminModalScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.classList.add('admin-modal-open');
+    document.body.style.top = `-${adminModalScrollY}px`;
+  }
+
+  function unlockAdminPageScroll(){
+    document.body.classList.remove('admin-modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, adminModalScrollY);
+  }
+
   const SESSION_KEY = 'ks_admin_demo_session';
   const DB_NAME = 'KyustendilScreenDemo';
   const DB_VERSION = 1;
@@ -773,7 +788,13 @@
         </section>`;
       document.body.appendChild(dialog);
 
-      const close = () => { dialog.classList.remove('show'); dialog.dataset.adId=''; dialog.querySelector('#internalAdFile').value=''; };
+      const close = () => {
+        if (!dialog.classList.contains('show')) return;
+        dialog.classList.remove('show');
+        dialog.dataset.adId='';
+        dialog.querySelector('#internalAdFile').value='';
+        unlockAdminPageScroll();
+      };
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
       dialog.querySelector('[data-internal-cancel]').addEventListener('click', close);
       dialog.addEventListener('click', e => { if (e.target===dialog) close(); });
@@ -842,7 +863,12 @@
     const selected=new Set(existing?.assignedScreens||[]);
     dialog.querySelector('#internalAdScreens').innerHTML=SCREEN_CATALOG.map(screen=>`
       <label class="screen-option"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}</strong><small>${esc(screen.description)}</small></span></label>`).join('');
+    lockAdminPageScroll();
     dialog.classList.add('show');
+    requestAnimationFrame(() => {
+      const panel = dialog.querySelector('.internal-ad-dialog');
+      if (panel) panel.scrollTop = 0;
+    });
   }
 
   function toggleInternalAd(id){
