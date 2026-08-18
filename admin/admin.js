@@ -54,8 +54,56 @@
   const FIXED_SLOT_SECONDS = 10;
   const TOTAL_SCREEN_SLOT_LIMIT = 10;
 
+  const WEEK_DAYS = [
+    {key:'mon', label:'Понеделник', short:'Пн'},
+    {key:'tue', label:'Вторник', short:'Вт'},
+    {key:'wed', label:'Сряда', short:'Ср'},
+    {key:'thu', label:'Четвъртък', short:'Чт'},
+    {key:'fri', label:'Петък', short:'Пт'},
+    {key:'sat', label:'Събота', short:'Сб'},
+    {key:'sun', label:'Неделя', short:'Нд'}
+  ];
+
+  const JS_DAY_TO_KEY = ['sun','mon','tue','wed','thu','fri','sat'];
+
+  function validTimeValue(value){
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+  }
+
+  function emptyWorkSchedule(){
+    return Object.fromEntries(
+      WEEK_DAYS.map(day => [day.key,{enabled:false,start:'',end:''}])
+    );
+  }
+
+  function normalizeWorkSchedule(schedule, legacyStart='', legacyEnd=''){
+    const result = emptyWorkSchedule();
+    const hasStructuredSchedule = schedule && typeof schedule === 'object';
+
+    WEEK_DAYS.forEach(day => {
+      const raw = hasStructuredSchedule ? schedule[day.key] : null;
+      if (raw && typeof raw === 'object'){
+        result[day.key] = {
+          enabled:Boolean(raw.enabled),
+          start:validTimeValue(raw.start) ? String(raw.start) : '',
+          end:validTimeValue(raw.end) ? String(raw.end) : ''
+        };
+      }else if (validTimeValue(legacyStart) && validTimeValue(legacyEnd)){
+        // v3.1–v3.4 migration: the old single daily interval becomes the
+        // same schedule for every day, so no existing estimate is lost.
+        result[day.key] = {
+          enabled:true,
+          start:String(legacyStart),
+          end:String(legacyEnd)
+        };
+      }
+    });
+
+    return result;
+  }
+
   const DEFAULT_SCREEN_CATALOG = [
-    {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:''},
+    {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:'', displayMode:'always'},
     {id:'pharmacy', name:'Аптека', description:'Планирана локация.', active:true, yodeckPlayerId:''},
     {id:'restaurant', name:'Заведение', description:'Планирана локация.', active:true, yodeckPlayerId:''}
   ];
@@ -65,13 +113,25 @@
     if (!['hidden','published','stopped'].includes(status)){
       status = screen?.active === false ? 'stopped' : 'published';
     }
+
+    const id = String(screen?.id || '').trim();
+    const legacyStart = validTimeValue(screen?.workStart) ? String(screen.workStart) : '';
+    const legacyEnd = validTimeValue(screen?.workEnd) ? String(screen.workEnd) : '';
+    const storedDisplayMode = String(screen?.displayMode || '').trim();
+    const displayMode = ['always','schedule'].includes(storedDisplayMode)
+      ? storedDisplayMode
+      : (id === 'funeral' ? 'always' : 'schedule');
+    const workSchedule = normalizeWorkSchedule(screen?.workSchedule, legacyStart, legacyEnd);
+
     return {
-      id:String(screen?.id || '').trim(),
+      id,
       name:String(screen?.name || 'Екран').trim(),
       address:String(screen?.address || '').trim(),
       description:String(screen?.description || '').trim(),
-      workStart:/^\d{2}:\d{2}$/.test(String(screen?.workStart || '')) ? String(screen.workStart) : '',
-      workEnd:/^\d{2}:\d{2}$/.test(String(screen?.workEnd || '')) ? String(screen.workEnd) : '',
+      displayMode,
+      workSchedule,
+      workStart:legacyStart,
+      workEnd:legacyEnd,
       wifiAvailable:typeof screen?.wifiAvailable === 'boolean' ? screen.wifiAvailable : null,
       readiness:{
         mounted:Boolean(screen?.readiness?.mounted),
@@ -102,7 +162,7 @@
         return raw.map(normalizeScreen).filter(s => s.id && s.name);
       }
     }catch(e){}
-    const defaults = DEFAULT_SCREEN_CATALOG.map(s => ({...s}));
+    const defaults = DEFAULT_SCREEN_CATALOG.map(s => normalizeScreen({...s}));
     localStorage.setItem(SCREENS_KEY, JSON.stringify(defaults));
     return defaults;
   }
@@ -147,18 +207,54 @@
     return minutes / 60;
   }
 
-  function workingTimeLabel(screen){
-    return screen?.workStart && screen?.workEnd
-      ? `${screen.workStart}–${screen.workEnd}`
-      : 'Не е зададено';
+  function scheduleDayHours(day){
+    if (!day?.enabled) return 0;
+    const hours = workingHoursDuration(day.start, day.end);
+    return hours === null ? 0 : hours;
   }
 
-  function screenHoursPerDay(screen){
-    const calculated = workingHoursDuration(screen?.workStart, screen?.workEnd);
-    if (calculated !== null) return calculated;
-    return Number.isFinite(Number(screen?.broadcastHoursPerDay))
-      ? Number(screen.broadcastHoursPerDay)
-      : null;
+  function screenTodaySchedule(screen){
+    if (!screen) return null;
+    if (screen.displayMode === 'always'){
+      return {key:JS_DAY_TO_KEY[new Date().getDay()], enabled:true, start:'00:00', end:'00:00', hours:24};
+    }
+
+    const key = JS_DAY_TO_KEY[new Date().getDay()];
+    const day = screen.workSchedule?.[key] || null;
+    return day ? {...day,key,hours:scheduleDayHours(day)} : {key,enabled:false,start:'',end:'',hours:0};
+  }
+
+  function screenWeeklyHours(screen){
+    if (!screen) return null;
+    if (screen.displayMode === 'always') return 24 * 7;
+
+    const schedule = screen.workSchedule || {};
+    return WEEK_DAYS.reduce((sum,day) => sum + scheduleDayHours(schedule[day.key]), 0);
+  }
+
+  function workingTimeLabel(screen){
+    if (!screen) return 'Не е зададено';
+    if (screen.displayMode === 'always') return '24/7';
+    return 'По график';
+  }
+
+  function todayWorkingTimeLabel(screen){
+    if (!screen) return 'Не е зададено';
+    if (screen.displayMode === 'always') return 'Днес: 24/7';
+
+    const today = screenTodaySchedule(screen);
+    if (!today?.enabled) return 'Днес: почивен ден';
+    return `Днес: ${today.start}–${today.end}`;
+  }
+
+  function screenScheduleSummary(screen){
+    if (!screen) return 'Не е зададено';
+    if (screen.displayMode === 'always') return '24/7 · 168 ч./седмица';
+
+    const weekly = screenWeeklyHours(screen);
+    const openDays = WEEK_DAYS.filter(day => screen.workSchedule?.[day.key]?.enabled).length;
+    if (!openDays) return 'По график · няма активни дни';
+    return `По график · ${openDays} ${openDays === 1 ? 'ден' : 'дни'} · ${Number(weekly.toFixed(1))} ч./седмица`;
   }
 
   function screenRotationStats(screenId){
@@ -171,7 +267,9 @@
       0
     );
 
-    const hoursPerDay = screenHoursPerDay(screen);
+    const today = screenTodaySchedule(screen);
+    const hoursToday = today?.hours ?? null;
+    const hoursPerWeek = screenWeeklyHours(screen);
 
     if (!items.length || cycleSeconds <= 0){
       return {
@@ -179,19 +277,24 @@
         cycleSeconds:0,
         rotationsPerHour:0,
         rotationsPerDay:null,
-        hoursPerDay
+        rotationsPerWeek:null,
+        hoursToday,
+        hoursPerWeek
       };
     }
 
     const rotationsPerHour = 3600 / cycleSeconds;
-    const rotationsPerDay = hoursPerDay ? rotationsPerHour * hoursPerDay : null;
+    const rotationsPerDay = hoursToday !== null ? rotationsPerHour * hoursToday : null;
+    const rotationsPerWeek = hoursPerWeek !== null ? rotationsPerHour * hoursPerWeek : null;
 
     return {
       items,
       cycleSeconds,
       rotationsPerHour,
       rotationsPerDay,
-      hoursPerDay
+      rotationsPerWeek,
+      hoursToday,
+      hoursPerWeek
     };
   }
 
@@ -1415,6 +1518,72 @@
     dialog.querySelector('#screenPhotoChoose').textContent = 'Смени снимката';
   }
 
+  function renderScreenScheduleEditor(dialog, schedule){
+    const box = dialog?.querySelector('#screenScheduleRows');
+    if (!box) return;
+
+    const normalized = normalizeWorkSchedule(schedule);
+    box.innerHTML = WEEK_DAYS.map(day => {
+      const value = normalized[day.key];
+      return `
+        <div class="screen-schedule-row ${value.enabled ? 'is-enabled' : 'is-closed'}" data-schedule-day="${day.key}">
+          <label class="screen-schedule-toggle">
+            <input type="checkbox" data-schedule-enabled="${day.key}" ${value.enabled ? 'checked' : ''}>
+            <span aria-hidden="true"></span>
+            <b>${day.label}</b>
+          </label>
+          <div class="screen-schedule-times">
+            <label>
+              <span>От</span>
+              <input type="time" data-schedule-start="${day.key}" value="${value.start}" ${value.enabled ? '' : 'disabled'}>
+            </label>
+            <label>
+              <span>До</span>
+              <input type="time" data-schedule-end="${day.key}" value="${value.end}" ${value.enabled ? '' : 'disabled'}>
+            </label>
+          </div>
+          <small class="screen-schedule-closed">${value.enabled ? '' : 'Почивен ден'}</small>
+        </div>`;
+    }).join('');
+
+    box.querySelectorAll('[data-schedule-enabled]').forEach(input => {
+      input.addEventListener('change', () => {
+        const key = input.dataset.scheduleEnabled;
+        const row = box.querySelector(`[data-schedule-day="${key}"]`);
+        const start = box.querySelector(`[data-schedule-start="${key}"]`);
+        const end = box.querySelector(`[data-schedule-end="${key}"]`);
+        const closed = row?.querySelector('.screen-schedule-closed');
+        const enabled = input.checked;
+
+        row?.classList.toggle('is-enabled', enabled);
+        row?.classList.toggle('is-closed', !enabled);
+        if (start) start.disabled = !enabled;
+        if (end) end.disabled = !enabled;
+        if (closed) closed.textContent = enabled ? '' : 'Почивен ден';
+      });
+    });
+  }
+
+  function readScreenScheduleEditor(dialog){
+    const schedule = emptyWorkSchedule();
+    WEEK_DAYS.forEach(day => {
+      const enabled = Boolean(dialog.querySelector(`[data-schedule-enabled="${day.key}"]`)?.checked);
+      schedule[day.key] = {
+        enabled,
+        start:dialog.querySelector(`[data-schedule-start="${day.key}"]`)?.value || '',
+        end:dialog.querySelector(`[data-schedule-end="${day.key}"]`)?.value || ''
+      };
+    });
+    return schedule;
+  }
+
+  function syncScreenDisplayModeEditor(dialog){
+    if (!dialog) return;
+    const mode = dialog.querySelector('input[name="screenDisplayMode"]:checked')?.value || '';
+    const scheduleBox = dialog.querySelector('#screenWeeklySchedule');
+    if (scheduleBox) scheduleBox.hidden = mode !== 'schedule';
+  }
+
   function closeScreenManageDialog(){
     const dialog = document.getElementById('screenManageDialog');
     if (!dialog || !dialog.classList.contains('show')) return;
@@ -1489,13 +1658,35 @@
               </div>
             </div>
 
-            <div class="admin-field-group">
-              <span class="internal-ad-label">Работно време <b class="admin-required-star">*</b></span>
-              <div class="admin-time-grid">
-                <label><span>От</span><input id="screenManageWorkStart" type="time"></label>
-                <label><span>До</span><input id="screenManageWorkEnd" type="time"></label>
+            <fieldset class="admin-choice-field screen-display-mode-field">
+              <legend>Режим на излъчване <b class="admin-required-star">*</b></legend>
+              <div class="admin-radio-row screen-display-mode-options">
+                <label>
+                  <input type="radio" name="screenDisplayMode" value="always">
+                  <span>
+                    <b>24/7</b>
+                    <small>За витрина / екран, който се вижда постоянно</small>
+                  </span>
+                </label>
+                <label>
+                  <input type="radio" name="screenDisplayMode" value="schedule">
+                  <span>
+                    <b>По график</b>
+                    <small>Различно работно време по дни</small>
+                  </span>
+                </label>
               </div>
-              <small class="field-help">Поддържа и работа през полунощ, например 18:00 → 02:00.</small>
+            </fieldset>
+
+            <div class="admin-field-group screen-weekly-schedule" id="screenWeeklySchedule" hidden>
+              <div class="screen-weekly-schedule-head">
+                <div>
+                  <span class="internal-ad-label">Седмичен график <b class="admin-required-star">*</b></span>
+                  <small>Включи само дните, в които екранът реално се вижда.</small>
+                </div>
+              </div>
+              <div id="screenScheduleRows" class="screen-schedule-rows"></div>
+              <small class="field-help">Поддържа работа през полунощ — например 18:00 → 02:00. При 24/7 графикът не се използва.</small>
             </div>
 
             <fieldset class="admin-choice-field">
@@ -1529,6 +1720,10 @@
       });
       dialog.addEventListener('click', e => {
         if (e.target === dialog) closeScreenManageDialog();
+      });
+
+      dialog.querySelectorAll('input[name="screenDisplayMode"]').forEach(input => {
+        input.addEventListener('change', () => syncScreenDisplayModeEditor(dialog));
       });
 
       dialog.querySelector('#screenPhotoChoose').addEventListener('click', () => {
@@ -1570,8 +1765,8 @@
         const name = dialog.querySelector('#screenManageName').value.trim();
         const address = dialog.querySelector('#screenManageAddress').value.trim();
         const description = dialog.querySelector('#screenManageDescription').value.trim();
-        const workStart = dialog.querySelector('#screenManageWorkStart').value;
-        const workEnd = dialog.querySelector('#screenManageWorkEnd').value;
+        const displayMode = dialog.querySelector('input[name="screenDisplayMode"]:checked')?.value || '';
+        const workSchedule = readScreenScheduleEditor(dialog);
         const wifiChoice = dialog.querySelector('input[name="screenWifi"]:checked')?.value || '';
         const wifiAvailable = wifiChoice === 'yes' ? true : (wifiChoice === 'no' ? false : null);
         const yodeckPlayerId = dialog.querySelector('#screenManageYodeck').value.trim();
@@ -1592,15 +1787,32 @@
           error.hidden = false;
           return;
         }
-        if (!workStart || !workEnd){
-          error.textContent = 'Въведи работното време „От“ и „До“.';
+        if (!['always','schedule'].includes(displayMode)){
+          error.textContent = 'Избери режим на излъчване — 24/7 или По график.';
           error.hidden = false;
           return;
         }
-        if (workingHoursDuration(workStart, workEnd) === null){
-          error.textContent = 'Работното време не е валидно.';
-          error.hidden = false;
-          return;
+
+        if (displayMode === 'schedule'){
+          const enabledDays = WEEK_DAYS.filter(day => workSchedule[day.key]?.enabled);
+          if (!enabledDays.length){
+            error.textContent = 'При режим „По график“ включи поне един работен ден.';
+            error.hidden = false;
+            return;
+          }
+
+          const invalidDay = enabledDays.find(day => {
+            const value = workSchedule[day.key];
+            return !validTimeValue(value.start) ||
+              !validTimeValue(value.end) ||
+              workingHoursDuration(value.start, value.end) === null;
+          });
+
+          if (invalidDay){
+            error.textContent = `Въведи валидни часове „От“ и „До“ за ${invalidDay.label}.`;
+            error.hidden = false;
+            return;
+          }
         }
         if (wifiAvailable === null){
           error.textContent = 'Избери дали локацията има Wi‑Fi.';
@@ -1660,8 +1872,12 @@
             target.name = name;
             target.address = address;
             target.description = description;
-            target.workStart = workStart;
-            target.workEnd = workEnd;
+            target.displayMode = displayMode;
+            target.workSchedule = workSchedule;
+            // Legacy fields stay only for backward compatibility with older demos.
+            const firstOpenDay = WEEK_DAYS.find(day => workSchedule[day.key]?.enabled);
+            target.workStart = displayMode === 'schedule' && firstOpenDay ? workSchedule[firstOpenDay.key].start : '';
+            target.workEnd = displayMode === 'schedule' && firstOpenDay ? workSchedule[firstOpenDay.key].end : '';
             target.wifiAvailable = wifiAvailable;
             target.yodeckPlayerId = yodeckPlayerId;
             target.broadcastHoursPerDay = null;
@@ -1674,8 +1890,10 @@
               name,
               address,
               description,
-              workStart,
-              workEnd,
+              displayMode,
+              workSchedule,
+              workStart:'',
+              workEnd:'',
               wifiAvailable,
               status:'hidden',
               active:false,
@@ -1709,8 +1927,14 @@
     dialog.querySelector('#screenManageName').value = existing?.name || '';
     dialog.querySelector('#screenManageAddress').value = existing?.address || '';
     dialog.querySelector('#screenManageDescription').value = existing?.description || '';
-    dialog.querySelector('#screenManageWorkStart').value = existing?.workStart || '';
-    dialog.querySelector('#screenManageWorkEnd').value = existing?.workEnd || '';
+
+    const initialDisplayMode = existing?.displayMode || 'schedule';
+    dialog.querySelectorAll('input[name="screenDisplayMode"]').forEach(input => {
+      input.checked = input.value === initialDisplayMode;
+    });
+    renderScreenScheduleEditor(dialog, existing?.workSchedule || emptyWorkSchedule());
+    syncScreenDisplayModeEditor(dialog);
+
     dialog.querySelectorAll('input[name="screenWifi"]').forEach(input => {
       input.checked = existing?.wifiAvailable === true
         ? input.value === 'yes'
@@ -2296,6 +2520,7 @@
             ${screen.description && screen.address ? `<small class="screen-description-line">${esc(screen.description)}</small>` : ''}
             <div class="screen-location-facts">
               <span>◷ ${esc(workingTimeLabel(screen))}</span>
+              <span>${esc(todayWorkingTimeLabel(screen))}</span>
               <span class="${screen.wifiAvailable === true ? 'wifi-yes' : screen.wifiAvailable === false ? 'wifi-no' : ''}">Wi‑Fi: ${screen.wifiAvailable === true ? 'Да' : screen.wifiAvailable === false ? 'Не' : 'Не е зададено'}</span>
             </div>
             ${screen.yodeckPlayerId ? `<div class="screen-yodeck-id">Yodeck ID: <strong>${esc(screen.yodeckPlayerId)}</strong></div>` : ''}
@@ -2317,18 +2542,20 @@
               </div>
             </div>
 
-            <div class="screen-rotation-mini">
+            <div class="screen-rotation-mini screen-rotation-mini-three">
               <div>
                 <span>≈ излъчвания / час</span>
                 <strong>${rotationStats.cycleSeconds ? formatApprox(rotationStats.rotationsPerHour) : '—'}</strong>
               </div>
               <div>
-                <span>≈ излъчвания / ден</span>
-                <strong>${rotationStats.rotationsPerDay ? formatApprox(rotationStats.rotationsPerDay) : '—'}</strong>
+                <span>≈ излъчвания / днес</span>
+                <strong>${rotationStats.rotationsPerDay !== null ? formatApprox(rotationStats.rotationsPerDay) : '—'}</strong>
               </div>
-              ${rotationStats.hoursPerDay
-                ? `<small>Работно време ${esc(workingTimeLabel(screen))} · ${rotationStats.hoursPerDay} ч. дневно.</small>`
-                : `<small>За дневна прогноза въведи работното време от „Редактирай“.</small>`}
+              <div>
+                <span>≈ излъчвания / седмица</span>
+                <strong>${rotationStats.rotationsPerWeek !== null ? formatApprox(rotationStats.rotationsPerWeek) : '—'}</strong>
+              </div>
+              <small>${esc(screenScheduleSummary(screen))} · ${esc(todayWorkingTimeLabel(screen))}</small>
             </div>
 
             <button class="screen-readiness-card ${readinessClass(readiness)}" data-screen-checklist="${esc(screen.id)}">
@@ -2556,8 +2783,12 @@
         <strong>${stats.cycleSeconds ? formatApprox(stats.rotationsPerHour) : '—'}</strong>
       </div>
       <div class="playlist-stat-highlight">
-        <span>≈ излъчвания / ден</span>
-        <strong>${stats.rotationsPerDay ? formatApprox(stats.rotationsPerDay) : '—'}</strong>
+        <span>≈ излъчвания / днес</span>
+        <strong>${stats.rotationsPerDay !== null ? formatApprox(stats.rotationsPerDay) : '—'}</strong>
+      </div>
+      <div class="playlist-stat-highlight">
+        <span>≈ излъчвания / седмица</span>
+        <strong>${stats.rotationsPerWeek !== null ? formatApprox(stats.rotationsPerWeek) : '—'}</strong>
       </div>
     `;
 
@@ -2568,7 +2799,7 @@
     estimateNote.id = 'playlistEstimateNote';
     estimateNote.className = 'playlist-estimate-note';
     estimateNote.innerHTML = stats.cycleSeconds
-      ? `При текущ цикъл от <strong>${stats.cycleSeconds} сек.</strong> всяка непаузирана реклама се появява приблизително <strong>${formatApprox(stats.rotationsPerHour)}</strong> пъти на час.${stats.rotationsPerDay ? ` При работно време <strong>${esc(workingTimeLabel(screen))}</strong> (${stats.hoursPerDay} ч.) това са около <strong>${formatApprox(stats.rotationsPerDay)}</strong> излъчвания на ден.` : ' Въведи работното време от „Редактирай екран“, за да получиш и дневна прогноза.'}<span>Това са излъчвания на playlist-а, не измерени гледания от хора.</span>`
+      ? `При текущ цикъл от <strong>${stats.cycleSeconds} сек.</strong> всяка непаузирана реклама се появява приблизително <strong>${formatApprox(stats.rotationsPerHour)}</strong> пъти на час. <strong>${esc(todayWorkingTimeLabel(screen))}</strong>${stats.rotationsPerDay !== null ? ` → около <strong>${formatApprox(stats.rotationsPerDay)}</strong> излъчвания днес.` : '.'} За целия зададен режим прогнозата е около <strong>${formatApprox(stats.rotationsPerWeek)}</strong> излъчвания седмично.<span>${esc(screenScheduleSummary(screen))}. Това са излъчвания на playlist-а, не измерени гледания от хора.</span>`
       : 'Добави поне една непаузирана реклама, за да изчислим честотата на излъчване.';
     dialog.querySelector('#playlistSummary').after(estimateNote);
 
@@ -2626,7 +2857,8 @@
               ` : `
                 <div class="playlist-row-frequency">
                   <span>${stats.cycleSeconds ? `${formatApprox(stats.rotationsPerHour)} / час` : '— / час'}</span>
-                  ${stats.rotationsPerDay ? `<span>${formatApprox(stats.rotationsPerDay)} / ден</span>` : ''}
+                  ${stats.rotationsPerDay !== null ? `<span>${formatApprox(stats.rotationsPerDay)} / днес</span>` : ''}
+                  ${stats.rotationsPerWeek !== null ? `<span>${formatApprox(stats.rotationsPerWeek)} / седмица</span>` : ''}
                 </div>
               `}
 
