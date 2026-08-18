@@ -223,11 +223,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.top = `-${publicScreenPickerScrollY}px`;
   }
 
+  function restorePublicScreenPickerScroll(){
+    const y = publicScreenPickerScrollY;
+    const restore = () => window.scrollTo({left:0, top:y, behavior:'instant'});
+
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+    });
+    setTimeout(restore, 80);
+  }
+
   function unlockPublicScreenPickerPage(){
     if (!document.body.classList.contains('public-screen-picker-locked')) return;
+    const active = document.activeElement;
+    if (active && typeof active.blur === 'function') active.blur();
+
     document.body.classList.remove('public-screen-picker-locked');
     document.body.style.top = '';
-    window.scrollTo(0, publicScreenPickerScrollY);
+    restorePublicScreenPickerScroll();
   }
 
   function closePublicScreenPicker(){
@@ -456,8 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (screenPickerPanel.hidden) openPublicScreenPicker();
     else closePublicScreenPicker();
   });
-  screenPickerClose?.addEventListener('click', closePublicScreenPicker);
-  screenPickerDone?.addEventListener('click', closePublicScreenPicker);
+  screenPickerClose?.addEventListener('click', event => {
+    event.preventDefault();
+    closePublicScreenPicker();
+  });
+  screenPickerDone?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closePublicScreenPicker();
+  });
 
   document.addEventListener('pointerdown', event => {
     if (!screenPicker || screenPickerPanel?.hidden) return;

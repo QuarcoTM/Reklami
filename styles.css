@@ -1284,3 +1284,14 @@ body.public-screen-picker-locked{
     touch-action:pan-y;
   }
 }
+
+
+/* v5.4 — keep exact scroll position after closing screen picker */
+.public-screen-picker-footer{
+  position:relative;
+  z-index:2;
+}
+body.public-screen-picker-locked .public-screen-picker-done,
+body.public-screen-picker-locked .public-screen-picker-close{
+  -webkit-tap-highlight-color:transparent;
+}
