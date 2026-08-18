@@ -17,15 +17,25 @@
   };
 
   const packageNames = { single:'SINGLE', local:'LOCAL', city:'CITY' };
+  const SCREENS_KEY = 'ks_screens_v1';
 
-  const screenNames = {
+  const fallbackScreens = {
     funeral:'Траурна агенция',
     pharmacy:'Аптека',
     restaurant:'Заведение'
   };
 
+  function loadClientScreens(){
+    try{
+      const screens = JSON.parse(localStorage.getItem(SCREENS_KEY) || '[]');
+      if (Array.isArray(screens) && screens.length) return screens;
+    }catch(e){}
+    return Object.entries(fallbackScreens).map(([id,name]) => ({id,name,active:true}));
+  }
+
   function assignedNames(r){
-    return (r.assignedScreens || []).map(id => screenNames[id]).filter(Boolean);
+    const map = new Map(loadClientScreens().map(s => [s.id,s.name]));
+    return (r.assignedScreens || []).map(id => map.get(id) || fallbackScreens[id]).filter(Boolean);
   }
 
   function esc(v=''){
