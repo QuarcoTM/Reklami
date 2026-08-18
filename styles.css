@@ -960,3 +960,16 @@ img{display:block;max-width:100%}
     text-align:left;
   }
 }
+
+
+/* v5.1 — partner work time and Wi-Fi */
+.partner-fieldset{margin:0;padding:0;border:0;min-width:0}
+.partner-fieldset>legend{margin:0 0 8px;padding:0;font-size:14px;font-weight:900;color:var(--ink)}
+.partner-time-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.partner-time-grid .field{margin:0}
+.field-inline-help{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.partner-choice-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.partner-choice-row label{position:relative;cursor:pointer}
+.partner-choice-row input{position:absolute;opacity:0;pointer-events:none}
+.partner-choice-row label>span{display:flex;min-height:48px;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:900}
+.partner-choice-row input:checked+span{border:2px solid var(--blue);background:var(--blue-soft);color:var(--blue)}

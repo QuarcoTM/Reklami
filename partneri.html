@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fbf8f1">
-  <link rel="stylesheet" href="styles.css?v=4.9">
+  <link rel="stylesheet" href="styles.css?v=5.1">
   <title>Стани партньор на Kyustendil Screen | Локация в Кюстендил</title>
   <meta name="description" content="Имаш видима локация с реален поток от хора в Кюстендил? Предложи я за партньорски рекламeн екран на Kyustendil Screen.">
   <meta name="robots" content="index,follow,max-image-preview:large">
@@ -55,7 +55,42 @@
 </header>
 <main>
 <section class="page-hero"><div class="container"><div class="section-tag">За партньори</div><h1>Имаш добра локация в Кюстендил?</h1><p>Търсим магазини, заведения, салони, чакални и други обекти с добра видимост или постоянен поток от хора.</p><div class="brand-rule" aria-hidden="true"><span class="blue-line"></span><span class="gold-dot"></span><span class="gold-line"></span></div></div></section>
-<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-demo-form><h2>Предложи локация</h2><div class="field"><label>Име на обекта</label><input required placeholder="Име на обекта"></div><div class="field"><label>Лице за контакт</label><input required placeholder="Име"></div><div class="field"><label>Телефон</label><input required type="tel" placeholder="Телефон"></div><div class="field"><label>Тип локация</label><select><option>Магазин / витрина</option><option>Заведение</option><option>Салон</option><option>Медицински кабинет / чакалня</option><option>Фитнес</option><option>Друго</option></select></div><div class="field"><label>Адрес</label><input required placeholder="Адрес на обекта"></div><div class="field"><label>Бележка</label><textarea placeholder="Витрина, Wi‑Fi, работно време, поток от хора..."></textarea></div><p class="form-help">В preview версията формата не изпраща данни към външен сървър. Преди изпращане можеш да прегледаш <a href="politika-za-poveritelnost.html">Политиката за поверителност</a>.</p><button class="btn btn-gold" type="submit">Изпрати локацията</button></form><aside class="side-stack"><div class="card info-card"><span class="badge badge-gold">Какво търсим</span><h3>Локации, които носят реална стойност</h3><ul class="checks"><li>Добра видимост</li><li>Реален поток от хора</li><li>Стабилно електрозахранване</li><li>Възможност за интернет или 4G</li><li>Подходящо място за телевизор</li></ul></div></aside></div></section>
+<section class="section" style="padding-top:20px"><div class="container form-layout"><form class="card form-card" data-partner-form>
+<h2>Предложи локация</h2>
+<p class="required-note"><span>*</span> – задължително поле</p>
+
+<div class="field"><label>Име на обекта <span class="required-star">*</span></label><input name="partner_business" required placeholder="Име на обекта"></div>
+<div class="field"><label>Лице за контакт <span class="required-star">*</span></label><input name="partner_contact" required placeholder="Име"></div>
+<div class="field"><label>Телефон <span class="required-star">*</span></label><input name="partner_phone" required type="tel" placeholder="Телефон"></div>
+
+<div class="field"><label>Тип локация <span class="required-star">*</span></label><select name="partner_type" required>
+<option value="" disabled selected>Избери тип</option>
+<option>Магазин / витрина</option><option>Заведение</option><option>Салон</option><option>Медицински кабинет / чакалня</option><option>Фитнес</option><option>Друго</option>
+</select></div>
+
+<div class="field"><label>Адрес <span class="required-star">*</span></label><input name="partner_address" required placeholder="Адрес на обекта"></div>
+
+<fieldset class="partner-fieldset">
+<legend>Работно време <span class="required-star">*</span></legend>
+<div class="partner-time-grid">
+<div class="field"><label>От</label><input name="partner_work_start" type="time" required></div>
+<div class="field"><label>До</label><input name="partner_work_end" type="time" required></div>
+</div>
+<p class="field-inline-help">Ако обектът работи през полунощ, например 18:00 → 02:00, въведи часовете точно така.</p>
+</fieldset>
+
+<fieldset class="partner-fieldset">
+<legend>Има ли Wi‑Fi? <span class="required-star">*</span></legend>
+<div class="partner-choice-row">
+<label><input type="radio" name="partner_wifi" value="yes" required><span>✓ Да</span></label>
+<label><input type="radio" name="partner_wifi" value="no"><span>✕ Не</span></label>
+</div>
+</fieldset>
+
+<div class="field"><label>Бележка <span class="optional-label">по желание</span></label><textarea name="partner_note" placeholder="Напр. място за монтаж, особености на витрината, поток от хора..."></textarea></div>
+
+<p class="form-help">В preview версията формата не изпраща данни към външен сървър. Преди изпращане можеш да прегледаш <a href="politika-za-poveritelnost.html">Политиката за поверителност</a>.</p>
+<button class="btn btn-gold" type="submit">Изпрати локацията</button></form><aside class="side-stack"><div class="card info-card"><span class="badge badge-gold">Какво търсим</span><h3>Локации, които носят реална стойност</h3><ul class="checks"><li>Добра видимост</li><li>Реален поток от хора</li><li>Стабилно електрозахранване</li><li>Възможност за интернет или 4G</li><li>Подходящо място за телевизор</li></ul></div></aside></div></section>
 </main>
 <footer class="site-footer">
   <div class="container">
@@ -94,6 +129,6 @@
   </div>
 </footer>
 <div class="toast" role="status" aria-live="polite"></div>
-<script src="script.js?v=411"></script>
+<script src="script.js?v=510"></script>
 </body>
 </html>

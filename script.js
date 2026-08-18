@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const requestForm = document.querySelector('form[data-demo-form]');
+  const requestForm = document.querySelector('form[data-ad-request-form]');
   if (requestForm) {
     // Event delegation makes the summary react reliably on mobile Safari as well.
     requestForm.addEventListener('change', (event) => {
@@ -367,7 +367,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => toast.classList.remove('show'), 4200);
   }
 
-  document.querySelectorAll('form[data-demo-form]').forEach(form => {
+  document.querySelectorAll('form[data-partner-form]').forEach(form => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      showToast('Формата е попълнена коректно. В demo режима предложението още не се изпраща към сървър.');
+    });
+  });
+
+  document.querySelectorAll('form[data-ad-request-form]').forEach(form => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
