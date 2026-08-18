@@ -93,7 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // In this static demo, capacity is read from the same browser's localStorage.
   const PUBLIC_SCREENS_KEY = 'ks_screens_v1';
   const PUBLIC_REQUESTS_KEY = 'ks_demo_requests_v1';
-  const PUBLIC_CLIENT_SLOT_LIMIT = 9;
+  const PUBLIC_INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
+  const PUBLIC_TOTAL_SLOT_LIMIT = 10;
 
   const DEFAULT_PUBLIC_SCREENS = [
     {id:'funeral', name:'Траурна агенция', description:'Пилотен екран', active:true},
@@ -159,6 +160,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function loadPublicInternalAds(){
+    try{
+      const ads = JSON.parse(localStorage.getItem(PUBLIC_INTERNAL_ADS_KEY) || '[]');
+      return Array.isArray(ads) ? ads : [];
+    }catch(e){
+      return [];
+    }
+  }
+
   function publicRequestOccupiesSlot(request){
     if (!request || ['done','rejected'].includes(String(request.status || ''))) return false;
 
@@ -170,14 +180,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function publicScreenCapacity(screenId){
-    const occupied = loadPublicRequests().filter(request =>
+    const clients = loadPublicRequests().filter(request =>
       publicRequestOccupiesSlot(request) &&
       (request.assignedScreens || []).includes(screenId)
     ).length;
 
+    const house = loadPublicInternalAds().filter(ad =>
+      ad.active !== false &&
+      (ad.assignedScreens || []).includes(screenId)
+    ).length;
+
+    const occupied = clients + house;
+
     return {
+      clients,
+      house,
       occupied,
-      full:occupied >= PUBLIC_CLIENT_SLOT_LIMIT
+      full:occupied >= PUBLIC_TOTAL_SLOT_LIMIT
     };
   }
 
@@ -195,11 +214,28 @@ document.addEventListener('DOMContentLoaded', () => {
     return publicSelectedScreenIds.map(id => byId.get(id)).filter(Boolean);
   }
 
+  let publicScreenPickerScrollY = 0;
+
+  function lockPublicScreenPickerPage(){
+    if (window.innerWidth > 620 || document.body.classList.contains('public-screen-picker-locked')) return;
+    publicScreenPickerScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.classList.add('public-screen-picker-locked');
+    document.body.style.top = `-${publicScreenPickerScrollY}px`;
+  }
+
+  function unlockPublicScreenPickerPage(){
+    if (!document.body.classList.contains('public-screen-picker-locked')) return;
+    document.body.classList.remove('public-screen-picker-locked');
+    document.body.style.top = '';
+    window.scrollTo(0, publicScreenPickerScrollY);
+  }
+
   function closePublicScreenPicker(){
     if (!screenPickerPanel || screenPickerPanel.hidden) return;
     screenPickerPanel.hidden = true;
     screenPickerTrigger?.setAttribute('aria-expanded','false');
     screenPicker?.classList.remove('is-open');
+    unlockPublicScreenPickerPage();
   }
 
   function openPublicScreenPicker(){
@@ -208,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
     screenPickerPanel.hidden = false;
     screenPickerTrigger.setAttribute('aria-expanded','true');
     screenPicker?.classList.add('is-open');
+    lockPublicScreenPickerPage();
   }
 
   function screenRuleText(rule){
@@ -431,8 +468,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Escape') closePublicScreenPicker();
   });
 
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 620) unlockPublicScreenPickerPage();
+    else if (screenPickerPanel && !screenPickerPanel.hidden) lockPublicScreenPickerPage();
+  });
+
   window.addEventListener('storage', event => {
-    if ([PUBLIC_SCREENS_KEY,PUBLIC_REQUESTS_KEY].includes(event.key)){
+    if ([PUBLIC_SCREENS_KEY,PUBLIC_REQUESTS_KEY,PUBLIC_INTERNAL_ADS_KEY].includes(event.key)){
       trimSelectionToPackage();
       syncSelectedScreenFields();
       updatePublicScreenHelp();
