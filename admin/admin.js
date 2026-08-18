@@ -1,6 +1,6 @@
 
 (() => {
-  const KS_ADMIN_VERSION = '3.6.3';
+  const KS_ADMIN_VERSION = '3.6.4';
   window.KS_ADMIN_VERSION = KS_ADMIN_VERSION;
   const STORAGE_KEY = 'ks_demo_requests_v1';
   const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
