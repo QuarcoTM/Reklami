@@ -1291,3 +1291,92 @@ body.admin-modal-open{
     min-height:160px;
   }
 }
+
+
+/* v2.7.1 — screen/location photo containment fix */
+
+/* Card photo can never grow outside its 210px slot. */
+.screen-card{
+  position:relative;
+  overflow:hidden;
+}
+
+.screen-preview,
+.screen-preview.has-location-photo{
+  position:relative;
+  width:100%;
+  height:210px !important;
+  min-height:210px;
+  max-height:210px;
+  overflow:hidden !important;
+  flex:none;
+}
+
+.screen-preview.has-location-photo>img{
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  min-width:0;
+  min-height:0;
+  max-width:100%;
+  max-height:100%;
+  object-fit:cover !important;
+  object-position:center;
+  display:block;
+}
+
+.screen-meta{
+  position:relative;
+  z-index:2;
+  background:var(--surface);
+}
+
+/* Editor preview also gets a real fixed-height frame.
+   This prevents tall screenshots from expanding the modal. */
+.screen-photo-editor-preview{
+  position:relative;
+  width:100%;
+  height:240px !important;
+  min-height:0 !important;
+  max-height:240px;
+  aspect-ratio:auto !important;
+  overflow:hidden !important;
+  flex:none;
+}
+
+.screen-photo-editor-preview>img{
+  position:absolute;
+  inset:0;
+  width:100% !important;
+  height:100% !important;
+  min-width:0;
+  min-height:0;
+  max-width:100%;
+  max-height:100%;
+  object-fit:cover !important;
+  object-position:center;
+  display:block;
+}
+
+.screen-photo-empty,
+.screen-photo-loading{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+}
+
+@media(max-width:600px){
+  .screen-photo-editor-preview{
+    height:190px !important;
+    max-height:190px;
+  }
+
+  .screen-preview,
+  .screen-preview.has-location-photo{
+    height:190px !important;
+    min-height:190px;
+    max-height:190px;
+  }
+}
