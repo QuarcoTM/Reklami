@@ -65,7 +65,11 @@
     return {
       id:String(screen?.id || '').trim(),
       name:String(screen?.name || 'Екран').trim(),
+      address:String(screen?.address || '').trim(),
       description:String(screen?.description || '').trim(),
+      workStart:/^\d{2}:\d{2}$/.test(String(screen?.workStart || '')) ? String(screen.workStart) : '',
+      workEnd:/^\d{2}:\d{2}$/.test(String(screen?.workEnd || '')) ? String(screen.workEnd) : '',
+      wifiAvailable:typeof screen?.wifiAvailable === 'boolean' ? screen.wifiAvailable : null,
       status,
       active:status === 'published',
       yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
@@ -117,6 +121,38 @@
     return `~${value.toFixed(1)}`;
   }
 
+  function timeToMinutes(value){
+    const match = /^(\d{2}):(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (h > 23 || m > 59) return null;
+    return h * 60 + m;
+  }
+
+  function workingHoursDuration(start, end){
+    const from = timeToMinutes(start);
+    const to = timeToMinutes(end);
+    if (from === null || to === null) return null;
+    let minutes = to - from;
+    if (minutes <= 0) minutes += 24 * 60;
+    return minutes / 60;
+  }
+
+  function workingTimeLabel(screen){
+    return screen?.workStart && screen?.workEnd
+      ? `${screen.workStart}–${screen.workEnd}`
+      : 'Не е зададено';
+  }
+
+  function screenHoursPerDay(screen){
+    const calculated = workingHoursDuration(screen?.workStart, screen?.workEnd);
+    if (calculated !== null) return calculated;
+    return Number.isFinite(Number(screen?.broadcastHoursPerDay))
+      ? Number(screen.broadcastHoursPerDay)
+      : null;
+  }
+
   function screenRotationStats(screenId){
     const screen = screenById(screenId);
     const items = allPlaylistItems(screenId)
@@ -127,7 +163,7 @@
       0
     );
 
-    const hoursPerDay = screen?.broadcastHoursPerDay ?? null;
+    const hoursPerDay = screenHoursPerDay(screen);
 
     if (!items.length || cycleSeconds <= 0){
       return {
@@ -1185,22 +1221,28 @@
           </div>
 
           <p class="change-dialog-help">Новият екран се създава като „Скрит / Подготовка“. Подготвяш го спокойно и натискаш „Покажи екрана“, когато е готов.</p>
+          <p class="admin-required-note"><span>*</span> – задължително поле</p>
 
           <div class="internal-ad-form">
             <label>
-              <span>Име на екрана / локацията</span>
+              <span>Име на екрана / локацията <b class="admin-required-star">*</b></span>
               <input id="screenManageName" type="text" placeholder="Напр. Фризьорски салон">
             </label>
 
             <label>
-              <span>Описание / адрес <small>(по желание)</small></span>
-              <input id="screenManageDescription" type="text" placeholder="Напр. бул. България 12 · витрина">
+              <span>Адрес <b class="admin-required-star">*</b></span>
+              <input id="screenManageAddress" type="text" placeholder="Напр. бул. България 12">
+            </label>
+
+            <label>
+              <span>Кратко описание <small class="admin-optional-label">по желание</small></span>
+              <input id="screenManageDescription" type="text" placeholder="Напр. витрина към главната улица">
             </label>
 
             <div class="screen-photo-field">
               <div class="screen-photo-field-head">
                 <div>
-                  <span class="internal-ad-label">Снимка на локацията / екрана <small>(по желание)</small></span>
+                  <span class="internal-ad-label">Снимка на локацията / екрана <small class="admin-optional-label">по желание</small></span>
                   <small>JPG или PNG · до 12 MB</small>
                 </div>
               </div>
@@ -1215,14 +1257,25 @@
               </div>
             </div>
 
-            <label>
-              <span>Часове излъчване на ден <small>(по желание)</small></span>
-              <input id="screenManageHours" type="number" min="1" max="24" step="0.5" inputmode="decimal" placeholder="Напр. 12">
-              <small class="field-help">Само за прогнозата на излъчванията на ден. Ако е празно, ще показваме само излъчвания на час.</small>
-            </label>
+            <div class="admin-field-group">
+              <span class="internal-ad-label">Работно време <b class="admin-required-star">*</b></span>
+              <div class="admin-time-grid">
+                <label><span>От</span><input id="screenManageWorkStart" type="time"></label>
+                <label><span>До</span><input id="screenManageWorkEnd" type="time"></label>
+              </div>
+              <small class="field-help">Поддържа и работа през полунощ, например 18:00 → 02:00.</small>
+            </div>
+
+            <fieldset class="admin-choice-field">
+              <legend>Има ли Wi‑Fi? <b class="admin-required-star">*</b></legend>
+              <div class="admin-radio-row">
+                <label><input type="radio" name="screenWifi" value="yes"><span>✓ Да</span></label>
+                <label><input type="radio" name="screenWifi" value="no"><span>✕ Не</span></label>
+              </div>
+            </fieldset>
 
             <label>
-              <span>Yodeck Player ID <small>(по желание, за по-късно)</small></span>
+              <span>Yodeck Player ID <small class="admin-optional-label">по желание</small></span>
               <input id="screenManageYodeck" type="text" placeholder="Ще го добавим след свързване с Yodeck">
             </label>
 
@@ -1283,10 +1336,13 @@
       dialog.querySelector('[data-screen-manage-save]').addEventListener('click', async () => {
         const screenId = dialog.dataset.screenId || '';
         const name = dialog.querySelector('#screenManageName').value.trim();
+        const address = dialog.querySelector('#screenManageAddress').value.trim();
         const description = dialog.querySelector('#screenManageDescription').value.trim();
+        const workStart = dialog.querySelector('#screenManageWorkStart').value;
+        const workEnd = dialog.querySelector('#screenManageWorkEnd').value;
+        const wifiChoice = dialog.querySelector('input[name="screenWifi"]:checked')?.value || '';
+        const wifiAvailable = wifiChoice === 'yes' ? true : (wifiChoice === 'no' ? false : null);
         const yodeckPlayerId = dialog.querySelector('#screenManageYodeck').value.trim();
-        const hoursRaw = dialog.querySelector('#screenManageHours').value.trim();
-        const broadcastHoursPerDay = hoursRaw === '' ? null : Number(hoursRaw);
         const photoFile = dialog.querySelector('#screenManagePhoto').files?.[0] || null;
         const removePhoto = dialog.dataset.removePhoto === '1';
         const error = dialog.querySelector('#screenManageError');
@@ -1299,9 +1355,23 @@
           error.hidden = false;
           return;
         }
-
-        if (broadcastHoursPerDay !== null && (!Number.isFinite(broadcastHoursPerDay) || broadcastHoursPerDay < 1 || broadcastHoursPerDay > 24)){
-          error.textContent = 'Часовете излъчване на ден трябва да са между 1 и 24.';
+        if (!address){
+          error.textContent = 'Напиши адрес на локацията.';
+          error.hidden = false;
+          return;
+        }
+        if (!workStart || !workEnd){
+          error.textContent = 'Въведи работното време „От“ и „До“.';
+          error.hidden = false;
+          return;
+        }
+        if (workingHoursDuration(workStart, workEnd) === null){
+          error.textContent = 'Работното време не е валидно.';
+          error.hidden = false;
+          return;
+        }
+        if (wifiAvailable === null){
+          error.textContent = 'Избери дали локацията има Wi‑Fi.';
           error.hidden = false;
           return;
         }
@@ -1356,9 +1426,13 @@
             const target = screens.find(s => s.id === screenId);
             if (!target) throw new Error('Screen not found');
             target.name = name;
+            target.address = address;
             target.description = description;
+            target.workStart = workStart;
+            target.workEnd = workEnd;
+            target.wifiAvailable = wifiAvailable;
             target.yodeckPlayerId = yodeckPlayerId;
-            target.broadcastHoursPerDay = broadcastHoursPerDay;
+            target.broadcastHoursPerDay = null;
             target.photo = newPhoto;
             target.updatedAt = new Date().toISOString();
           }else{
@@ -1366,11 +1440,15 @@
             screens.push({
               id:makeScreenId(),
               name,
+              address,
               description,
+              workStart,
+              workEnd,
+              wifiAvailable,
               status:'hidden',
               active:false,
               yodeckPlayerId,
-              broadcastHoursPerDay,
+              broadcastHoursPerDay:null,
               photo:newPhoto,
               createdAt:now,
               updatedAt:now
@@ -1397,8 +1475,17 @@
     dialog.dataset.removePhoto = '0';
     dialog.querySelector('#screenManageTitle').textContent = existing ? 'Редактирай екран' : 'Добави екран';
     dialog.querySelector('#screenManageName').value = existing?.name || '';
+    dialog.querySelector('#screenManageAddress').value = existing?.address || '';
     dialog.querySelector('#screenManageDescription').value = existing?.description || '';
-    dialog.querySelector('#screenManageHours').value = existing?.broadcastHoursPerDay ?? '';
+    dialog.querySelector('#screenManageWorkStart').value = existing?.workStart || '';
+    dialog.querySelector('#screenManageWorkEnd').value = existing?.workEnd || '';
+    dialog.querySelectorAll('input[name="screenWifi"]').forEach(input => {
+      input.checked = existing?.wifiAvailable === true
+        ? input.value === 'yes'
+        : existing?.wifiAvailable === false
+          ? input.value === 'no'
+          : false;
+    });
     dialog.querySelector('#screenManageYodeck').value = existing?.yodeckPlayerId || '';
     dialog.querySelector('#screenManagePhoto').value = '';
     dialog.querySelector('#screenManageError').hidden = true;
@@ -1586,15 +1673,19 @@
             <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
           </div>
           <p class="change-dialog-help">За „Рекламирай тук“, служебни съобщения и други реклами, които не минават през клиентска заявка.</p>
+          <p class="admin-required-note"><span>*</span> – задължително поле</p>
 
           <div class="internal-ad-form">
-            <label><span>Име на рекламата</span><input id="internalAdTitle" type="text" placeholder="Напр. Рекламирай тук"></label>
-            <div><span class="internal-ad-label">Екрани</span><div id="internalAdScreens" class="screen-assignment-options"></div></div>
-            <label><span>Времетраене</span><select id="internalAdDuration"><option value="8">8 сек.</option><option value="9">9 сек.</option><option value="10">10 сек.</option></select></label>
-            <label class="creative-upload-drop">
-              <input id="internalAdFile" type="file" accept="image/jpeg,image/png,video/mp4">
-              <span class="creative-upload-icon">⇧</span><strong id="internalAdFileLabel">Избери JPG, PNG или MP4</strong><small>Максимум 25 MB</small>
-            </label>
+            <label><span>Име на рекламата <b class="admin-required-star">*</b></span><input id="internalAdTitle" type="text" placeholder="Напр. Рекламирай тук"></label>
+            <div><span class="internal-ad-label">Екрани <b class="admin-required-star">*</b></span><div id="internalAdScreens" class="screen-assignment-options"></div></div>
+            <label><span>Времетраене <b class="admin-required-star">*</b></span><select id="internalAdDuration"><option value="8">8 сек.</option><option value="9">9 сек.</option><option value="10">10 сек.</option></select></label>
+            <div>
+              <span class="internal-ad-label" id="internalAdFileRequirement">Рекламен файл <b class="admin-required-star">*</b></span>
+              <label class="creative-upload-drop">
+                <input id="internalAdFile" type="file" accept="image/jpeg,image/png,video/mp4">
+                <span class="creative-upload-icon">⇧</span><strong id="internalAdFileLabel">Избери JPG, PNG или MP4</strong><small>Максимум 25 MB</small>
+              </label>
+            </div>
             <div id="internalAdExistingFile" class="selected-creative-file" hidden></div>
             <div id="internalAdFileCheck" class="admin-ad-file-check" hidden></div>
             <div class="change-dialog-error" id="internalAdError" hidden></div>
@@ -1709,6 +1800,9 @@
     dialog.querySelector('#internalAdFile').value='';
     dialog._internalAdValidation=null;
     dialog.querySelector('#internalAdFileLabel').textContent=existing?'Смени файла (по желание)':'Избери JPG, PNG или MP4';
+    dialog.querySelector('#internalAdFileRequirement').innerHTML=existing
+      ? 'Рекламен файл <small class="admin-optional-label">по желание при редакция</small>'
+      : 'Рекламен файл <b class="admin-required-star">*</b>';
     dialog.querySelector('#internalAdError').hidden=true;
     dialog.querySelector('#internalAdFileCheck').hidden=true;
     dialog.querySelector('#internalAdFileCheck').innerHTML='';
@@ -1772,7 +1866,12 @@
               </span>
             </div>
             <h3>${esc(screen.name)}</h3>
-            <p>${esc(screen.description || 'Без добавено описание.')}</p>
+            <p>${esc(screen.address || screen.description || 'Адресът още не е въведен.')}</p>
+            ${screen.description && screen.address ? `<small class="screen-description-line">${esc(screen.description)}</small>` : ''}
+            <div class="screen-location-facts">
+              <span>◷ ${esc(workingTimeLabel(screen))}</span>
+              <span class="${screen.wifiAvailable === true ? 'wifi-yes' : screen.wifiAvailable === false ? 'wifi-no' : ''}">Wi‑Fi: ${screen.wifiAvailable === true ? 'Да' : screen.wifiAvailable === false ? 'Не' : 'Не е зададено'}</span>
+            </div>
             ${screen.yodeckPlayerId ? `<div class="screen-yodeck-id">Yodeck ID: <strong>${esc(screen.yodeckPlayerId)}</strong></div>` : ''}
 
             <div class="screen-summary-grid">
@@ -1790,8 +1889,8 @@
                 <strong>${rotationStats.rotationsPerDay ? formatApprox(rotationStats.rotationsPerDay) : '—'}</strong>
               </div>
               ${rotationStats.hoursPerDay
-                ? `<small>При ${rotationStats.hoursPerDay} ч. излъчване дневно.</small>`
-                : `<small>За дневна прогноза задай часове/ден от „Редактирай“.</small>`}
+                ? `<small>Работно време ${esc(workingTimeLabel(screen))} · ${rotationStats.hoursPerDay} ч. дневно.</small>`
+                : `<small>За дневна прогноза въведи работното време от „Редактирай“.</small>`}
             </div>
 
             <div class="screen-campaign-list">
@@ -2020,7 +2119,7 @@
     estimateNote.id = 'playlistEstimateNote';
     estimateNote.className = 'playlist-estimate-note';
     estimateNote.innerHTML = stats.cycleSeconds
-      ? `При текущ цикъл от <strong>${stats.cycleSeconds} сек.</strong> всяка непаузирана реклама се появява приблизително <strong>${formatApprox(stats.rotationsPerHour)}</strong> пъти на час.${stats.rotationsPerDay ? ` При <strong>${stats.hoursPerDay} ч.</strong> работа това са около <strong>${formatApprox(stats.rotationsPerDay)}</strong> излъчвания на ден.` : ' Задай часовете работа от „Редактирай екран“, за да получиш и дневна прогноза.'}<span>Това са излъчвания на playlist-а, не измерени гледания от хора.</span>`
+      ? `При текущ цикъл от <strong>${stats.cycleSeconds} сек.</strong> всяка непаузирана реклама се появява приблизително <strong>${formatApprox(stats.rotationsPerHour)}</strong> пъти на час.${stats.rotationsPerDay ? ` При работно време <strong>${esc(workingTimeLabel(screen))}</strong> (${stats.hoursPerDay} ч.) това са около <strong>${formatApprox(stats.rotationsPerDay)}</strong> излъчвания на ден.` : ' Въведи работното време от „Редактирай екран“, за да получиш и дневна прогноза.'}<span>Това са излъчвания на playlist-а, не измерени гледания от хора.</span>`
       : 'Добави поне една непаузирана реклама, за да изчислим честотата на излъчване.';
     dialog.querySelector('#playlistSummary').after(estimateNote);
 
@@ -2877,7 +2976,7 @@
             </div>
             <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
           </div>
-          <p class="change-dialog-help" id="screenAssignmentRule"></p>
+          <p class="change-dialog-help" id="screenAssignmentRule"></p><p class="admin-required-note"><span>*</span> – задължително поле</p><div class="admin-field-title">Екрани <b class="admin-required-star">*</b></div>
           <div id="screenAssignmentOptions" class="screen-assignment-options"></div>
           <div class="change-dialog-error" id="screenAssignmentError" hidden></div>
           <div class="change-dialog-actions">
@@ -2956,7 +3055,7 @@
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
           <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:''}</strong>
-          <small>${esc(screen.description || 'Без описание')}</small>
+          <small>${esc(screen.address || screen.description || 'Без адрес')}</small>
         </span>
       </label>`).join('');
 
@@ -3016,6 +3115,8 @@
           <p class="change-dialog-help">
             Клиентът ще види този файл в профила си и ще избере „Одобрявам визията“ или „Искам корекция“.
           </p>
+          <p class="admin-required-note"><span>*</span> – задължително поле</p>
+          <div class="admin-field-title">Готова визия <b class="admin-required-star">*</b></div>
 
           <label class="creative-upload-drop">
             <input id="creativeUploadFile" type="file" accept="image/jpeg,image/png,video/mp4">
@@ -3174,6 +3275,8 @@
           <p class="change-dialog-help">
             Напиши го свободно с думи. Клиентът ще види точно този текст в профила си.
           </p>
+          <p class="admin-required-note"><span>*</span> – задължително поле</p>
+          <div class="admin-field-title">Какво трябва да се промени? <b class="admin-required-star">*</b></div>
 
           <textarea id="changeRequestText" rows="6"
             placeholder="Например: Моля, качете логото във висока резолюция и добавете телефон за контакт."></textarea>
@@ -3253,10 +3356,30 @@
     }
   }
 
+  function closeScreenLayersBeforeRequest(){
+    const broadcast = document.getElementById('broadcastPreviewDialog');
+    if (broadcast?.classList.contains('show')) closeBroadcastPreview();
+
+    const playlist = document.getElementById('screenPlaylistDialog');
+    if (playlist?.classList.contains('show')) closeScreenPlaylist();
+
+    const manage = document.getElementById('screenManageDialog');
+    if (manage?.classList.contains('show')) closeScreenManageDialog();
+
+    const del = document.getElementById('deleteScreenDialog');
+    if (del?.classList.contains('show')) closeDeleteScreenDialog();
+  }
+
   // Delegated events
   document.addEventListener('click', async (e) => {
     const openBtn = e.target.closest('[data-open-request]');
-    if (openBtn) openRequest(openBtn.dataset.openRequest);
+    if (openBtn){
+      e.preventDefault();
+      e.stopPropagation();
+      closeScreenLayersBeforeRequest();
+      openRequest(openBtn.dataset.openRequest);
+      return;
+    }
 
     const assignScreens = e.target.closest('[data-assign-screens]');
     if (assignScreens) openScreenAssignmentDialog(assignScreens.dataset.assignScreens);

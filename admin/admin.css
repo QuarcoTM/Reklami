@@ -1867,3 +1867,27 @@ body.admin-modal-open{
     grid-template-columns:1fr 1fr;
   }
 }
+
+
+/* v3.1 — working time, Wi-Fi, required markers, request layering */
+.admin-required-note{margin:8px 0 14px;color:var(--muted);font-size:12px;font-weight:750}
+.admin-required-note>span,.admin-required-star{color:#e75f93;font-weight:950}
+.admin-optional-label{display:inline-flex;margin-left:5px;padding:2px 6px;border-radius:999px;background:#f2efe8;color:#777168;font-size:9px;font-weight:850;vertical-align:middle}
+.admin-field-title{margin:5px 0 8px;color:#222;font-size:13px;font-weight:900}
+.admin-field-group{display:grid;gap:7px}
+.admin-time-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.admin-time-grid label{display:grid;gap:6px}
+.admin-choice-field{margin:0;padding:0;border:0;min-width:0}
+.admin-choice-field legend{margin:0 0 8px;padding:0;font-size:13px;font-weight:900}
+.admin-radio-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.admin-radio-row label{position:relative;cursor:pointer}
+.admin-radio-row input{position:absolute;opacity:0;pointer-events:none}
+.admin-radio-row label>span{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:900;transition:.15s}
+.admin-radio-row input:checked+span{border:2px solid var(--blue);background:#f1f6ff;color:var(--blue)}
+.screen-description-line{display:block;margin:-2px 0 8px;color:var(--muted);line-height:1.4}
+.screen-location-facts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.screen-location-facts>span{display:inline-flex;align-items:center;min-height:27px;padding:0 8px;border-radius:999px;background:#f2f0eb;color:#655f56;font-size:10px;font-weight:850}
+.screen-location-facts .wifi-yes{background:#edf8f0;color:#27713e}
+.screen-location-facts .wifi-no{background:#fff1f1;color:#9a3c3c}
+.drawer-backdrop{z-index:390!important}
+.request-drawer{z-index:400!important}
