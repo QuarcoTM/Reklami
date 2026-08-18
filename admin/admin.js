@@ -59,6 +59,87 @@
     return count >= 1;
   }
 
+
+  function getScreenSetting(r, screenId){
+    const saved = r?.screenSettings?.[screenId] || {};
+    return {
+      duration: [8,9,10].includes(Number(saved.duration)) ? Number(saved.duration) : 10,
+      paused: Boolean(saved.paused),
+      order: Number.isFinite(Number(saved.order)) ? Number(saved.order) : null
+    };
+  }
+
+  function ensureScreenSettings(requests, screenId){
+    const assigned = requests.filter(r => (r.assignedScreens || []).includes(screenId));
+    let changed = false;
+
+    const usedOrders = assigned
+      .map(r => getScreenSetting(r, screenId).order)
+      .filter(v => v !== null);
+
+    let nextOrder = usedOrders.length ? Math.max(...usedOrders) + 1 : 1;
+
+    assigned
+      .sort((a,b) => new Date(a.activeAt || a.createdAt || 0) - new Date(b.activeAt || b.createdAt || 0))
+      .forEach(r => {
+        if (!r.screenSettings) {
+          r.screenSettings = {};
+          changed = true;
+        }
+        if (!r.screenSettings[screenId]) {
+          r.screenSettings[screenId] = {duration:10, paused:false, order:nextOrder++};
+          changed = true;
+          return;
+        }
+        const current = r.screenSettings[screenId];
+        if (![8,9,10].includes(Number(current.duration))) {
+          current.duration = 10;
+          changed = true;
+        }
+        if (typeof current.paused !== 'boolean') {
+          current.paused = false;
+          changed = true;
+        }
+        if (!Number.isFinite(Number(current.order))) {
+          current.order = nextOrder++;
+          changed = true;
+        }
+      });
+
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    return requests;
+  }
+
+  function screenPlaylistRequests(screenId, includeInactive=false){
+    let requests = syncCampaignLifecycle();
+    requests = ensureScreenSettings(requests, screenId);
+
+    return requests
+      .filter(r =>
+        (r.assignedScreens || []).includes(screenId) &&
+        (includeInactive || r.status === 'active')
+      )
+      .sort((a,b) => {
+        const ao = getScreenSetting(a, screenId).order ?? 999999;
+        const bo = getScreenSetting(b, screenId).order ?? 999999;
+        if (ao !== bo) return ao - bo;
+        return new Date(a.activeAt || a.createdAt || 0) - new Date(b.activeAt || b.createdAt || 0);
+      });
+  }
+
+  function playlistCycleSeconds(screenId){
+    return screenPlaylistRequests(screenId)
+      .filter(r => !getScreenSetting(r, screenId).paused)
+      .reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
+  }
+
+  function campaignCreative(r){
+    if (r.finalCreative?.key) return r.finalCreative;
+    const files = r.files || [];
+    const media = files.find(f => f.key && ['image/jpeg','image/png','video/mp4'].includes(String(f.type || '')));
+    return media || null;
+  }
+
   function esc(v=''){
     return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   }
@@ -565,31 +646,277 @@
     const requests = syncCampaignLifecycle();
 
     box.innerHTML = SCREEN_CATALOG.map(screen => {
+      ensureScreenSettings(requests, screen.id);
+
       const active = requests
         .filter(r => r.status === 'active' && (r.assignedScreens || []).includes(screen.id))
-        .sort((a,b) => new Date(a.expiresAt || 0) - new Date(b.expiresAt || 0));
+        .sort((a,b) => {
+          const ao = getScreenSetting(a, screen.id).order ?? 999999;
+          const bo = getScreenSetting(b, screen.id).order ?? 999999;
+          return ao - bo;
+        });
+
+      const playing = active.filter(r => !getScreenSetting(r, screen.id).paused);
+      const paused = active.length - playing.length;
+      const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
 
       return `
         <article class="screen-card panel">
           <div class="screen-preview"><div class="fake-tv"><span>${screen.tvLabel}</span></div></div>
           <div class="screen-meta">
             <div class="screen-card-top">
-              <span class="status-pill ${active.length ? 'status-active' : 'status-draft'}">
-                ${active.length ? `${active.length} ${active.length === 1 ? 'активна реклама' : 'активни реклами'}` : 'Няма активни реклами'}
+              <span class="status-pill ${playing.length ? 'status-active' : 'status-draft'}">
+                ${playing.length ? `${playing.length} ${playing.length === 1 ? 'излъчвана реклама' : 'излъчвани реклами'}` : 'Няма излъчвани реклами'}
               </span>
             </div>
             <h3>${esc(screen.name)}</h3>
             <p>${esc(screen.description)}</p>
-            <div class="screen-campaign-list">
-              ${active.length ? active.map(r => `
-                <button class="screen-campaign-row" data-open-request="${esc(r.id)}">
-                  <span><strong>${esc(r.id)} · ${esc(r.company || 'Кампания')}</strong><small>до ${formatDateOnly(r.expiresAt)}</small></span>
-                  <b>Отвори →</b>
-                </button>`).join('') : '<div class="screen-campaign-empty">Този екран е свободен.</div>'}
+
+            <div class="screen-summary-grid">
+              <div><span>Цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
+              <div><span>Пауза</span><strong>${paused}</strong></div>
             </div>
+
+            <div class="screen-campaign-list">
+              ${active.length ? active.slice(0,3).map(r => {
+                const setting = getScreenSetting(r, screen.id);
+                return `
+                <button class="screen-campaign-row ${setting.paused ? 'is-paused' : ''}" data-open-request="${esc(r.id)}">
+                  <span>
+                    <strong>${esc(r.id)} · ${esc(r.company || 'Кампания')}</strong>
+                    <small>${setting.paused ? 'Пауза · ' : ''}${setting.duration} сек. · до ${formatDateOnly(r.expiresAt)}</small>
+                  </span>
+                  <b>Отвори →</b>
+                </button>`;
+              }).join('') : '<div class="screen-campaign-empty">Този екран е свободен.</div>'}
+              ${active.length > 3 ? `<div class="screen-more-count">+ още ${active.length - 3}</div>` : ''}
+            </div>
+
+            <button class="btn btn-primary screen-playlist-open" data-open-playlist="${esc(screen.id)}">
+              Отвори плейлиста
+            </button>
           </div>
         </article>`;
     }).join('');
+  }
+
+  let activePlaylistScreenId = null;
+  let playlistPreviewUrls = [];
+
+  function closeScreenPlaylist(){
+    const dialog = document.getElementById('screenPlaylistDialog');
+    if (!dialog) return;
+    dialog.classList.remove('show');
+    activePlaylistScreenId = null;
+    playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    playlistPreviewUrls = [];
+  }
+
+  function ensurePlaylistDialog(){
+    let dialog = document.getElementById('screenPlaylistDialog');
+    if (dialog) return dialog;
+
+    dialog = document.createElement('div');
+    dialog.id = 'screenPlaylistDialog';
+    dialog.className = 'playlist-dialog-backdrop';
+    dialog.innerHTML = `
+      <section class="playlist-dialog" role="dialog" aria-modal="true">
+        <div class="playlist-dialog-head">
+          <div>
+            <span class="section-kicker">ЕКРАН / ПЛЕЙЛИСТ</span>
+            <h2 id="playlistDialogTitle">Плейлист</h2>
+            <p id="playlistDialogSubtitle"></p>
+          </div>
+          <button type="button" class="playlist-dialog-close" aria-label="Затвори">×</button>
+        </div>
+
+        <div id="playlistSummary" class="playlist-summary"></div>
+        <div id="playlistItems" class="playlist-items"></div>
+
+        <div class="playlist-dialog-foot">
+          <span>Demo управление. След Yodeck тези настройки ще управляват реалния екран.</span>
+          <button type="button" class="btn btn-light" data-playlist-close>Затвори</button>
+        </div>
+      </section>`;
+
+    document.body.appendChild(dialog);
+
+    dialog.querySelector('.playlist-dialog-close').addEventListener('click', closeScreenPlaylist);
+    dialog.querySelector('[data-playlist-close]').addEventListener('click', closeScreenPlaylist);
+    dialog.addEventListener('click', e => {
+      if (e.target === dialog) closeScreenPlaylist();
+    });
+
+    return dialog;
+  }
+
+  async function renderPlaylistPreviews(screenId){
+    const rows = [...document.querySelectorAll('[data-playlist-preview]')];
+
+    for (const box of rows){
+      const requestId = box.dataset.playlistPreview;
+      const r = loadRequests().find(x => x.id === requestId);
+      const creative = campaignCreative(r);
+
+      if (!creative?.key){
+        box.innerHTML = '<div class="playlist-preview-placeholder"><span>KS</span><small>Няма локален preview</small></div>';
+        continue;
+      }
+
+      const record = await getStoredFile(creative.key);
+      if (!record?.blob){
+        box.innerHTML = '<div class="playlist-preview-placeholder"><span>KS</span><small>Файлът не е на това устройство</small></div>';
+        continue;
+      }
+
+      const url = URL.createObjectURL(record.blob);
+      playlistPreviewUrls.push(url);
+
+      if (String(record.type || creative.type || '').startsWith('video/')){
+        box.innerHTML = `<video src="${url}" muted playsinline preload="metadata"></video><span class="playlist-media-badge">VIDEO</span>`;
+      }else{
+        box.innerHTML = `<img src="${url}" alt="Preview на рекламата"><span class="playlist-media-badge">IMAGE</span>`;
+      }
+    }
+  }
+
+  function renderScreenPlaylist(screenId){
+    const screen = screenById(screenId);
+    if (!screen) return;
+
+    activePlaylistScreenId = screenId;
+    const dialog = ensurePlaylistDialog();
+
+    playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    playlistPreviewUrls = [];
+
+    const items = screenPlaylistRequests(screenId);
+    const playing = items.filter(r => !getScreenSetting(r, screenId).paused);
+    const pausedCount = items.length - playing.length;
+    const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
+
+    dialog.querySelector('#playlistDialogTitle').textContent = `${screen.name} — Playlist`;
+    dialog.querySelector('#playlistDialogSubtitle').textContent =
+      items.length
+        ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
+        : 'Няма активни кампании, разпределени към този екран.';
+
+    dialog.querySelector('#playlistSummary').innerHTML = `
+      <div><span>Активни кампании</span><strong>${items.length}</strong></div>
+      <div><span>В момента се излъчват</span><strong>${playing.length}</strong></div>
+      <div><span>На пауза</span><strong>${pausedCount}</strong></div>
+      <div><span>Общ цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
+    `;
+
+    const itemsBox = dialog.querySelector('#playlistItems');
+
+    if (!items.length){
+      itemsBox.innerHTML = `
+        <div class="playlist-empty">
+          <strong>Няма активни реклами.</strong>
+          <span>Когато активираш кампания, разпределена към този екран, тя ще се появи тук автоматично.</span>
+        </div>`;
+    }else{
+      itemsBox.innerHTML = items.map((r,index) => {
+        const setting = getScreenSetting(r, screenId);
+        return `
+          <article class="playlist-item ${setting.paused ? 'is-paused' : ''}" data-playlist-request="${esc(r.id)}">
+            <div class="playlist-order">
+              <strong>${index + 1}</strong>
+              <div>
+                <button type="button" aria-label="Премести нагоре" data-playlist-move="up" data-request-id="${esc(r.id)}" ${index === 0 ? 'disabled' : ''}>↑</button>
+                <button type="button" aria-label="Премести надолу" data-playlist-move="down" data-request-id="${esc(r.id)}" ${index === items.length - 1 ? 'disabled' : ''}>↓</button>
+              </div>
+            </div>
+
+            <div class="playlist-preview" data-playlist-preview="${esc(r.id)}">
+              <div class="playlist-preview-placeholder"><span>KS</span><small>Зареждане…</small></div>
+            </div>
+
+            <div class="playlist-copy">
+              <div class="playlist-title-row">
+                <div>
+                  <span class="section-kicker">${esc(r.id)}</span>
+                  <h3>${esc(r.company || r.name || 'Кампания')}</h3>
+                </div>
+                <span class="playlist-state ${setting.paused ? 'paused' : 'playing'}">${setting.paused ? 'ПАУЗА' : 'ИЗЛЪЧВА СЕ'}</span>
+              </div>
+
+              <div class="playlist-meta">
+                <span>До ${formatDateOnly(r.expiresAt)}</span>
+                <span>${campaignTimeLeftText(r)}</span>
+              </div>
+
+              <div class="playlist-controls">
+                <label>
+                  <span>Времетраене</span>
+                  <select data-playlist-duration="${esc(r.id)}">
+                    <option value="8" ${setting.duration===8?'selected':''}>8 сек.</option>
+                    <option value="9" ${setting.duration===9?'selected':''}>9 сек.</option>
+                    <option value="10" ${setting.duration===10?'selected':''}>10 сек.</option>
+                  </select>
+                </label>
+
+                <button type="button"
+                  class="btn ${setting.paused ? 'btn-success' : 'btn-warning'}"
+                  data-playlist-pause="${esc(r.id)}">
+                  ${setting.paused ? 'Пусни отново' : 'Пауза само тук'}
+                </button>
+
+                <button type="button" class="btn btn-light" data-open-request="${esc(r.id)}">
+                  Заявка
+                </button>
+              </div>
+            </div>
+          </article>`;
+      }).join('');
+    }
+
+    dialog.classList.add('show');
+    renderPlaylistPreviews(screenId);
+  }
+
+  function updateScreenSetting(requestId, screenId, patch){
+    const requests = loadRequests();
+    const r = requests.find(x => x.id === requestId);
+    if (!r) return;
+
+    if (!r.screenSettings) r.screenSettings = {};
+    const current = getScreenSetting(r, screenId);
+    r.screenSettings[screenId] = {...current, ...patch};
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    renderAll();
+    renderScreenPlaylist(screenId);
+  }
+
+  function movePlaylistItem(requestId, screenId, direction){
+    const requests = ensureScreenSettings(loadRequests(), screenId);
+    const active = requests
+      .filter(r => r.status === 'active' && (r.assignedScreens || []).includes(screenId))
+      .sort((a,b) => (getScreenSetting(a,screenId).order ?? 999999) - (getScreenSetting(b,screenId).order ?? 999999));
+
+    const index = active.findIndex(r => r.id === requestId);
+    if (index < 0) return;
+
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= active.length) return;
+
+    const a = active[index];
+    const b = active[swapIndex];
+
+    if (!a.screenSettings) a.screenSettings = {};
+    if (!b.screenSettings) b.screenSettings = {};
+
+    const aSetting = getScreenSetting(a, screenId);
+    const bSetting = getScreenSetting(b, screenId);
+
+    a.screenSettings[screenId] = {...aSetting, order:bSetting.order};
+    b.screenSettings[screenId] = {...bSetting, order:aSetting.order};
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    renderAll();
+    renderScreenPlaylist(screenId);
   }
 
   function renderCreatives(){
@@ -1252,6 +1579,24 @@
     const assignScreens = e.target.closest('[data-assign-screens]');
     if (assignScreens) openScreenAssignmentDialog(assignScreens.dataset.assignScreens);
 
+    const openPlaylist = e.target.closest('[data-open-playlist]');
+    if (openPlaylist) renderScreenPlaylist(openPlaylist.dataset.openPlaylist);
+
+    const movePlaylist = e.target.closest('[data-playlist-move]');
+    if (movePlaylist && activePlaylistScreenId) {
+      movePlaylistItem(movePlaylist.dataset.requestId, activePlaylistScreenId, movePlaylist.dataset.playlistMove);
+    }
+
+    const pausePlaylist = e.target.closest('[data-playlist-pause]');
+    if (pausePlaylist && activePlaylistScreenId) {
+      const r = loadRequests().find(x => x.id === pausePlaylist.dataset.playlistPause);
+      if (r) {
+        const setting = getScreenSetting(r, activePlaylistScreenId);
+        updateScreenSetting(r.id, activePlaylistScreenId, {paused:!setting.paused});
+        toast(setting.paused ? 'Рекламата е пусната отново на този екран.' : 'Рекламата е спряна само на този екран.');
+      }
+    }
+
     const dl = e.target.closest('[data-download-key]');
     if (dl) await downloadFile(dl.dataset.downloadKey, dl.dataset.downloadName);
 
@@ -1298,6 +1643,17 @@
         case 'done': updateStatus(activeRequestId,'done'); toast('Кампанията е приключена ръчно.'); break;
         case 'reopen': updateStatus(activeRequestId,'new'); toast('Заявката е върната като нова.'); break;
         case 'copy-payment': copyPaymentText(r); break;
+      }
+    }
+  });
+
+  document.addEventListener('change', e => {
+    const duration = e.target.closest('[data-playlist-duration]');
+    if (duration && activePlaylistScreenId){
+      const seconds = Number(duration.value);
+      if ([8,9,10].includes(seconds)){
+        updateScreenSetting(duration.dataset.playlistDuration, activePlaylistScreenId, {duration:seconds});
+        toast(`Времетраене: ${seconds} сек.`);
       }
     }
   });
