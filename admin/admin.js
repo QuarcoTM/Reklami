@@ -1535,6 +1535,7 @@
               <span class="creative-upload-icon">⇧</span><strong id="internalAdFileLabel">Избери JPG, PNG или MP4</strong><small>Максимум 25 MB</small>
             </label>
             <div id="internalAdExistingFile" class="selected-creative-file" hidden></div>
+            <div id="internalAdFileCheck" class="admin-ad-file-check" hidden></div>
             <div class="change-dialog-error" id="internalAdError" hidden></div>
           </div>
           <div class="change-dialog-actions"><button type="button" class="btn btn-light" data-internal-cancel>Отказ</button><button type="button" class="btn btn-primary" data-internal-save>Запази рекламата</button></div>
@@ -1546,16 +1547,36 @@
         dialog.classList.remove('show');
         dialog.dataset.adId='';
         dialog.querySelector('#internalAdFile').value='';
+        dialog._internalAdValidation=null;
+        const check=dialog.querySelector('#internalAdFileCheck');
+        check.hidden=true;
+        check.innerHTML='';
         unlockAdminPageScroll();
         clearAdminOverlay('internal-ad');
       };
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
       dialog.querySelector('[data-internal-cancel]').addEventListener('click', close);
       dialog.addEventListener('click', e => { if (e.target===dialog) close(); });
-      dialog.querySelector('#internalAdFile').addEventListener('change', e => {
+      dialog.querySelector('#internalAdFile').addEventListener('change', async e => {
         const file=e.target.files?.[0];
+        const check=dialog.querySelector('#internalAdFileCheck');
         dialog.querySelector('#internalAdFileLabel').textContent=file?`${file.name} · ${formatBytes(file.size)}`:'Избери JPG, PNG или MP4';
         dialog.querySelector('#internalAdError').hidden=true;
+        dialog._internalAdValidation=null;
+
+        if(!file){
+          check.hidden=true;
+          check.innerHTML='';
+          return;
+        }
+
+        check.hidden=false;
+        check.className='admin-ad-file-check checking';
+        check.innerHTML='<strong>Проверяваме файла…</strong>';
+        const result=await inspectAdFile(file);
+        if(dialog.querySelector('#internalAdFile').files?.[0]!==file)return;
+        dialog._internalAdValidation=result;
+        renderAdFileCheck(check,result);
       });
 
       dialog.querySelector('[data-internal-save]').addEventListener('click', async () => {
@@ -1571,15 +1592,31 @@
         if(!title){ error.textContent='Напиши име на рекламата.'; error.hidden=false; return; }
         if(!screens.length){ error.textContent='Избери поне един екран.'; error.hidden=false; return; }
         if(!current&&!file){ error.textContent='Избери JPG, PNG или MP4.'; error.hidden=false; return; }
-        if(file&&!['image/jpeg','image/png','video/mp4'].includes(file.type)){ error.textContent='Разрешени са само JPG, PNG и MP4.'; error.hidden=false; return; }
-        if(file&&file.size>25*1024*1024){ error.textContent='Файлът е по-голям от 25 MB.'; error.hidden=false; return; }
+        if(file&&!dialog._internalAdValidation){
+          error.textContent='Изчакай проверката на файла.';
+          error.hidden=false;
+          return;
+        }
+        if(file&&dialog._internalAdValidation&&!dialog._internalAdValidation.valid){
+          error.textContent='Файлът има технически проблем. Провери съобщението под него.';
+          error.hidden=false;
+          return;
+        }
 
         let storedFile=current?.file||null;
         if(file){
           const key=`internal-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
           try{
             await putStoredFile({key,blob:file,name:file.name,type:file.type,size:file.size,createdAt:new Date().toISOString()});
-            storedFile={key,name:file.name,type:file.type,size:file.size};
+            storedFile={
+              key,
+              name:file.name,
+              type:file.type,
+              size:file.size,
+              width:dialog._internalAdValidation?.width || null,
+              height:dialog._internalAdValidation?.height || null,
+              duration:dialog._internalAdValidation?.duration || null
+            };
           }catch(err){ console.error(err); error.textContent='Файлът не можа да бъде записан в demo режима.'; error.hidden=false; return; }
         }
 
@@ -1609,8 +1646,11 @@
     dialog.querySelector('#internalAdTitle').value=existing?.title||'';
     dialog.querySelector('#internalAdDuration').value=String(existing?.duration||10);
     dialog.querySelector('#internalAdFile').value='';
+    dialog._internalAdValidation=null;
     dialog.querySelector('#internalAdFileLabel').textContent=existing?'Смени файла (по желание)':'Избери JPG, PNG или MP4';
     dialog.querySelector('#internalAdError').hidden=true;
+    dialog.querySelector('#internalAdFileCheck').hidden=true;
+    dialog.querySelector('#internalAdFileCheck').innerHTML='';
     const existingFile=dialog.querySelector('#internalAdExistingFile');
     existingFile.hidden=!existing?.file;
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
@@ -2288,6 +2328,142 @@
     return `${(n/1024/1024).toFixed(1)} MB`;
   }
 
+  const AD_FILE_MAX_BYTES = 25 * 1024 * 1024;
+  const AD_FILE_TYPES = new Set(['image/jpeg','image/png','video/mp4']);
+
+  function adRatioLabel(width, height){
+    if (!width || !height) return '—';
+    const r = width / height;
+    const near = (a,b,t=.035) => Math.abs(a-b) / b <= t;
+    if (near(r,16/9)) return '16:9';
+    if (near(r,9/16)) return '9:16';
+    if (near(r,4/3)) return '4:3';
+    if (near(r,1)) return '1:1';
+    return `${(r >= 1 ? r : 1/r).toFixed(2)}:${r >= 1 ? '1' : (1/r).toFixed(2)}`;
+  }
+
+  function adStandardRatio(width, height){
+    if (!width || !height) return false;
+    const r = width / height;
+    const near = (a,b,t=.035) => Math.abs(a-b) / b <= t;
+    return near(r,16/9) || near(r,9/16);
+  }
+
+  function adImageMeta(file){
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const meta = {width:img.naturalWidth,height:img.naturalHeight,duration:null};
+        URL.revokeObjectURL(url);
+        resolve(meta);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image-meta')); };
+      img.src = url;
+    });
+  }
+
+  function adVideoMeta(file){
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.preload='metadata';
+      video.muted=true;
+      video.playsInline=true;
+      video.onloadedmetadata = () => {
+        const meta = {
+          width:video.videoWidth,
+          height:video.videoHeight,
+          duration:Number.isFinite(video.duration) ? video.duration : null
+        };
+        URL.revokeObjectURL(url);
+        resolve(meta);
+      };
+      video.onerror = () => { URL.revokeObjectURL(url); reject(new Error('video-meta')); };
+      video.src=url;
+    });
+  }
+
+  async function inspectAdFile(file){
+    const result={file,valid:true,errors:[],warnings:[],details:[],width:null,height:null,duration:null};
+
+    if(!file){
+      result.valid=false;
+      result.errors.push('Няма избран файл.');
+      return result;
+    }
+    if(!AD_FILE_TYPES.has(file.type)){
+      result.valid=false;
+      result.errors.push('Разрешени са само JPG, PNG и MP4.');
+      return result;
+    }
+    if(file.size>AD_FILE_MAX_BYTES){
+      result.valid=false;
+      result.errors.push('Файлът е по-голям от 25 MB.');
+    }
+
+    let meta;
+    try{
+      meta=file.type==='video/mp4' ? await adVideoMeta(file) : await adImageMeta(file);
+    }catch(e){
+      result.valid=false;
+      result.errors.push('Файлът не може да бъде прочетен коректно.');
+      return result;
+    }
+
+    result.width=meta.width;
+    result.height=meta.height;
+    result.duration=meta.duration;
+
+    const ratio=adRatioLabel(meta.width,meta.height);
+    result.details.push(file.type==='video/mp4'?'MP4':(file.type==='image/png'?'PNG':'JPG'));
+    result.details.push(`${meta.width}×${meta.height}`);
+    result.details.push(ratio);
+    result.details.push(formatBytes(file.size));
+
+    const landscape=meta.width>=meta.height;
+    const fullHD=landscape
+      ? meta.width>=1920 && meta.height>=1080
+      : meta.width>=1080 && meta.height>=1920;
+    const HD=landscape
+      ? meta.width>=1280 && meta.height>=720
+      : meta.width>=720 && meta.height>=1280;
+
+    if(!adStandardRatio(meta.width,meta.height)){
+      result.warnings.push(`Съотношението е ${ratio}. За телевизионен екран е най-добре 16:9 или 9:16.`);
+    }
+    if(!HD){
+      result.warnings.push(`Резолюцията ${meta.width}×${meta.height} е ниска и може да изглежда неясно на телевизор.`);
+    }else if(!fullHD){
+      result.warnings.push('Файлът е използваем, но Full HD (1920×1080 или 1080×1920) е по-добрият вариант.');
+    }
+    if(file.type==='video/mp4' && meta.duration!=null){
+      result.details.push(`${meta.duration.toFixed(1)} сек.`);
+      if(meta.duration<8 || meta.duration>10){
+        result.warnings.push(`Видеото е ${meta.duration.toFixed(1)} сек. Препоръчителната дължина е 8–10 сек.`);
+      }
+    }
+
+    return result;
+  }
+
+  function renderAdFileCheck(box,result){
+    if(!box)return;
+    box.hidden=false;
+    const state=!result.valid?'error':(result.warnings.length?'warning':'ok');
+    const title=state==='ok'?'✓ Подходящо за излъчване':state==='warning'?'⚠ Нужна е проверка':'✕ Файлът не е подходящ';
+    box.className=`admin-ad-file-check ${state}`;
+    box.innerHTML=`
+      <div class="admin-ad-file-check-head">
+        <strong>${title}</strong>
+        ${result.details?.length?`<span>${result.details.map(esc).join(' · ')}</span>`:''}
+      </div>
+      ${result.errors?.length?`<div class="admin-ad-file-check-list">${result.errors.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}
+      ${result.warnings?.length?`<div class="admin-ad-file-check-list">${result.warnings.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}
+    `;
+  }
+
+
   const drawer = document.getElementById('requestDrawer');
   const backdrop = document.getElementById('drawerBackdrop');
   let activeRequestId = null;
@@ -2741,6 +2917,7 @@
           </label>
 
           <div class="selected-creative-file" id="selectedCreativeFile">Няма избран файл</div>
+          <div id="creativeUploadFileCheck" class="admin-ad-file-check" hidden></div>
           <div class="change-dialog-error" id="creativeUploadError" hidden></div>
 
           <div class="change-dialog-actions">
@@ -2757,17 +2934,37 @@
         dialog.querySelector('#creativeUploadFile').value = '';
         dialog.querySelector('#selectedCreativeFile').textContent = 'Няма избран файл';
         dialog.querySelector('#creativeUploadError').hidden = true;
+        dialog._creativeValidation = null;
+        const check = dialog.querySelector('#creativeUploadFileCheck');
+        check.hidden = true;
+        check.innerHTML = '';
       };
 
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
       dialog.querySelector('[data-creative-cancel]').addEventListener('click', close);
       dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
 
-      dialog.querySelector('#creativeUploadFile').addEventListener('change', e => {
+      dialog.querySelector('#creativeUploadFile').addEventListener('change', async e => {
         const file = e.target.files?.[0];
+        const check = dialog.querySelector('#creativeUploadFileCheck');
         dialog.querySelector('#selectedCreativeFile').textContent =
           file ? `${file.name} · ${formatBytes(file.size)}` : 'Няма избран файл';
         dialog.querySelector('#creativeUploadError').hidden = true;
+        dialog._creativeValidation = null;
+
+        if(!file){
+          check.hidden=true;
+          check.innerHTML='';
+          return;
+        }
+
+        check.hidden=false;
+        check.className='admin-ad-file-check checking';
+        check.innerHTML='<strong>Проверяваме файла…</strong>';
+        const result=await inspectAdFile(file);
+        if(dialog.querySelector('#creativeUploadFile').files?.[0]!==file)return;
+        dialog._creativeValidation=result;
+        renderAdFileCheck(check,result);
       });
 
       dialog.querySelector('[data-creative-send]').addEventListener('click', async () => {
@@ -2780,13 +2977,13 @@
           error.hidden = false;
           return;
         }
-        if (!['image/jpeg','image/png','video/mp4'].includes(file.type)){
-          error.textContent = 'Разрешени са само JPG, PNG и MP4.';
+        if (!dialog._creativeValidation){
+          error.textContent = 'Изчакай проверката на файла.';
           error.hidden = false;
           return;
         }
-        if (file.size > 25 * 1024 * 1024){
-          error.textContent = 'Файлът е по-голям от 25 MB.';
+        if (!dialog._creativeValidation.valid){
+          error.textContent = 'Файлът има технически проблем. Провери съобщението под него.';
           error.hidden = false;
           return;
         }
@@ -2814,6 +3011,9 @@
             name:file.name,
             type:file.type,
             size:file.size,
+            width:dialog._creativeValidation?.width || null,
+            height:dialog._creativeValidation?.height || null,
+            duration:dialog._creativeValidation?.duration || null,
             uploadedAt:new Date().toISOString()
           };
           req.creativeApprovalStatus = 'pending';
@@ -2834,6 +3034,12 @@
     }
 
     dialog.dataset.requestId = id;
+    dialog._creativeValidation = null;
+    dialog.querySelector('#creativeUploadFile').value = '';
+    dialog.querySelector('#selectedCreativeFile').textContent = 'Няма избран файл';
+    dialog.querySelector('#creativeUploadFileCheck').hidden = true;
+    dialog.querySelector('#creativeUploadFileCheck').innerHTML = '';
+    dialog.querySelector('#creativeUploadError').hidden = true;
     dialog.classList.add('show');
   }
 

@@ -1712,3 +1712,61 @@ body.admin-modal-open{
     padding:7px 10px;
   }
 }
+
+
+/* v2.9 — automatic advertising file check */
+.admin-ad-file-check{
+  margin-top:10px;
+  padding:12px 13px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  font-size:12px;
+  line-height:1.45;
+}
+.admin-ad-file-check.checking{
+  background:#f5f5f3;
+  color:var(--muted);
+}
+.admin-ad-file-check.ok{
+  background:#f1faf4;
+  border-color:#b9dfc5;
+  color:#1d6a36;
+}
+.admin-ad-file-check.warning{
+  background:#fff9e8;
+  border-color:#ead599;
+  color:#806017;
+}
+.admin-ad-file-check.error{
+  background:#fff2f2;
+  border-color:#ebbbbb;
+  color:#9a3030;
+}
+.admin-ad-file-check-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+}
+.admin-ad-file-check-head>strong{
+  font-size:13px;
+}
+.admin-ad-file-check-head>span{
+  font-size:11px;
+  opacity:.78;
+  text-align:right;
+}
+.admin-ad-file-check-list{
+  display:grid;
+  gap:4px;
+  margin-top:7px;
+}
+@media(max-width:600px){
+  .admin-ad-file-check-head{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .admin-ad-file-check-head>span{
+    text-align:left;
+  }
+}
