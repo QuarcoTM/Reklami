@@ -1,5 +1,7 @@
 
 (() => {
+  const KS_ADMIN_VERSION = '3.6.3';
+  window.KS_ADMIN_VERSION = KS_ADMIN_VERSION;
   const STORAGE_KEY = 'ks_demo_requests_v1';
   const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
   const SCREENS_KEY = 'ks_screens_v1';
@@ -4569,9 +4571,15 @@
     if (checklist?.classList.contains('show')) closeScreenChecklist();
   }
 
-  // Delegated events
+  // Delegated events. Normalize the click target first: on some mobile
+  // Safari/WebKit taps the event target can be a Text node, which has no
+  // .closest() method. Without this guard every delegated Admin button
+  // (Отвори, Планирай, Избери екрани, etc.) can appear completely dead.
   document.addEventListener('click', async (e) => {
-    const openBtn = e.target.closest('[data-open-request]');
+    const clickTarget = e.target instanceof Element ? e.target : e.target?.parentElement;
+    if (!clickTarget) return;
+
+    const openBtn = clickTarget.closest('[data-open-request]');
     if (openBtn){
       e.preventDefault();
       e.stopPropagation();
@@ -4580,39 +4588,39 @@
       return;
     }
 
-    const assignScreens = e.target.closest('[data-assign-screens]');
+    const assignScreens = clickTarget.closest('[data-assign-screens]');
     if (assignScreens) openScreenAssignmentDialog(assignScreens.dataset.assignScreens);
 
-    const openPlaylist = e.target.closest('[data-open-playlist]');
+    const openPlaylist = clickTarget.closest('[data-open-playlist]');
     if (openPlaylist) renderScreenPlaylist(openPlaylist.dataset.openPlaylist);
 
-    const editScreen = e.target.closest('[data-edit-screen]');
+    const editScreen = clickTarget.closest('[data-edit-screen]');
     if (editScreen) openScreenDialog(editScreen.dataset.editScreen);
 
-    const checklistScreen = e.target.closest('[data-screen-checklist]');
+    const checklistScreen = clickTarget.closest('[data-screen-checklist]');
     if (checklistScreen) openScreenChecklist(checklistScreen.dataset.screenChecklist);
 
-    const statusScreenBtn = e.target.closest('[data-set-screen-status]');
+    const statusScreenBtn = clickTarget.closest('[data-set-screen-status]');
     if (statusScreenBtn) setScreenStatus(statusScreenBtn.dataset.screenId, statusScreenBtn.dataset.setScreenStatus);
 
-    const deleteScreenBtn = e.target.closest('[data-delete-screen]');
+    const deleteScreenBtn = clickTarget.closest('[data-delete-screen]');
     if (deleteScreenBtn) openDeleteScreenDialog(deleteScreenBtn.dataset.deleteScreen);
 
-    const editInternal = e.target.closest('[data-edit-internal-ad]');
+    const editInternal = clickTarget.closest('[data-edit-internal-ad]');
     if (editInternal) openInternalAdDialog(editInternal.dataset.editInternalAd);
 
-    const toggleInternal = e.target.closest('[data-toggle-internal-ad]');
+    const toggleInternal = clickTarget.closest('[data-toggle-internal-ad]');
     if (toggleInternal) toggleInternalAd(toggleInternal.dataset.toggleInternalAd);
 
-    const deleteInternal = e.target.closest('[data-delete-internal-ad]');
+    const deleteInternal = clickTarget.closest('[data-delete-internal-ad]');
     if (deleteInternal) deleteInternalAd(deleteInternal.dataset.deleteInternalAd);
 
-    const movePlaylist = e.target.closest('[data-playlist-move]');
+    const movePlaylist = clickTarget.closest('[data-playlist-move]');
     if (movePlaylist && activePlaylistScreenId) {
       movePlaylistItem(movePlaylist.dataset.requestId, activePlaylistScreenId, movePlaylist.dataset.playlistMove);
     }
 
-    const pausePlaylist = e.target.closest('[data-playlist-pause]');
+    const pausePlaylist = clickTarget.closest('[data-playlist-pause]');
     if (pausePlaylist && activePlaylistScreenId) {
       const r = findPlaylistItem(pausePlaylist.dataset.playlistPause);
       if (r) {
@@ -4622,10 +4630,10 @@
       }
     }
 
-    const dl = e.target.closest('[data-download-key]');
+    const dl = clickTarget.closest('[data-download-key]');
     if (dl) await downloadFile(dl.dataset.downloadKey, dl.dataset.downloadName);
 
-    const actionBtn = e.target.closest('[data-action]');
+    const actionBtn = clickTarget.closest('[data-action]');
     if (actionBtn && activeRequestId){
       const r = loadRequests().find(x => x.id === activeRequestId);
       switch(actionBtn.dataset.action){
