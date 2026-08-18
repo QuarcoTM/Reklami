@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fbf8f1">
-  <link rel="stylesheet" href="styles.css?v=5.1">
+  <link rel="stylesheet" href="styles.css?v=5.2">
   <title>Пусни реклама на екран в Кюстендил | Kyustendil Screen</title>
   <meta name="description" content="Изпрати заявка за реклама на дигиталните екрани на Kyustendil Screen. Избери пакет, локации и рекламна визия.">
   <meta name="robots" content="index,follow,max-image-preview:large">
@@ -61,7 +61,40 @@
 <div class="field"><label>Телефон <span class="required-star">*</span></label><input required name="phone" type="tel" placeholder="Телефон"></div>
 <div class="field"><label>Email <span class="required-star">*</span></label><input required name="email" type="email" placeholder="email@example.com"></div>
 <div class="field field-panel field-package"><label>Пакет <span class="required-star">*</span></label><select required name="package"><option value="" disabled selected>Избери пакет</option><option value="single">SINGLE — €25 / месец</option><option value="local">LOCAL — €49 / месец</option><option value="city">CITY — 4–5 екрана — €69 / месец</option></select></div>
-<div class="field"><label>Предпочитани локации <span class="optional-label">по желание</span></label><input name="locations" placeholder="Напр. аптека + заведение"></div>
+<div class="field field-panel field-screen-picker">
+  <label>Екрани / локации <span class="required-star">*</span></label>
+
+  <div class="public-screen-picker" id="publicScreenPicker">
+    <button class="public-screen-picker-trigger" id="publicScreenPickerTrigger" type="button" aria-expanded="false" disabled>
+      <span>
+        <small>Избрани екрани</small>
+        <strong id="publicScreenPickerValue">Първо избери пакет</strong>
+      </span>
+      <span class="public-screen-picker-chevron" aria-hidden="true">⌄</span>
+    </button>
+
+    <div class="public-screen-picker-panel" id="publicScreenPickerPanel" hidden>
+      <div class="public-screen-picker-panel-head">
+        <div>
+          <strong>Избери екрани</strong>
+          <small id="publicScreenPickerRule">Избери пакет, за да видиш лимита.</small>
+        </div>
+        <button type="button" class="public-screen-picker-close" id="publicScreenPickerClose" aria-label="Затвори">×</button>
+      </div>
+
+      <div class="public-screen-options" id="publicScreenOptions"></div>
+
+      <div class="public-screen-picker-footer">
+        <span id="publicScreenPickerCount">0 избрани</span>
+        <button type="button" class="btn btn-blue public-screen-picker-done" id="publicScreenPickerDone">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="hidden" name="locations" id="selectedScreenNames" value="">
+  <input type="hidden" name="preferred_screen_ids" id="selectedScreenIds" value="">
+  <p class="screen-picker-help" id="publicScreenPickerHelp">Първо избери пакет.</p>
+</div>
 <fieldset class="creative-field creative-panel" id="design">
       <legend>Рекламна визия <span class="required-star">*</span></legend>
       <p class="creative-help">Избери една опция. Добавката за изработка е еднократна и не се начислява всеки месец.</p>
@@ -167,6 +200,7 @@
         <span class="summary-status">Плащане след одобрение</span>
       </div>
       <div class="summary-row"><span>Пакет</span><strong data-summary-package>Избери пакет</strong></div>
+      <div class="summary-row"><span>Екрани</span><strong data-summary-screens>Не са избрани</strong></div>
       <div class="summary-row"><span>Рекламна визия</span><strong data-summary-design>Избери визия</strong></div>
       <div class="summary-total"><span>Общо за плащане след одобрение</span><strong data-summary-total>—</strong></div>
       <p class="summary-note" data-summary-note>Избраната сума е крайната сума за този пакет и визия.</p>
@@ -237,7 +271,7 @@
   </div>
 </footer>
 <div class="toast" role="status" aria-live="polite"></div>
-<script src="demo-bridge.js?v=1"></script>
-<script src="script.js?v=510"></script>
+<script src="demo-bridge.js?v=2"></script>
+<script src="script.js?v=520"></script>
 </body>
 </html>

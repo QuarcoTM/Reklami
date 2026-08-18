@@ -973,3 +973,289 @@ img{display:block;max-width:100%}
 .partner-choice-row input{position:absolute;opacity:0;pointer-events:none}
 .partner-choice-row label>span{display:flex;min-height:48px;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:900}
 .partner-choice-row input:checked+span{border:2px solid var(--blue);background:var(--blue-soft);color:var(--blue)}
+
+
+/* v5.2 — required professional screen picker */
+.field-screen-picker{
+  position:relative;
+  overflow:visible;
+  background:linear-gradient(145deg,#fbfdff,#f3f7ff);
+  border-color:#d7e1f5;
+}
+.field-screen-picker>label{
+  margin-top:0;
+}
+.public-screen-picker{
+  position:relative;
+}
+.public-screen-picker-trigger{
+  width:100%;
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 13px;
+  border:1px solid #cfd8e8;
+  border-radius:14px;
+  background:#fff;
+  color:var(--ink);
+  text-align:left;
+  font:inherit;
+  cursor:pointer;
+  transition:.15s ease;
+}
+.public-screen-picker-trigger:not(:disabled):hover,
+.public-screen-picker.is-open .public-screen-picker-trigger{
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(21,63,184,.08);
+}
+.public-screen-picker-trigger:disabled{
+  opacity:.62;
+  cursor:not-allowed;
+  background:#f4f4f2;
+}
+.public-screen-picker-trigger>span:first-child{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.public-screen-picker-trigger small{
+  color:var(--muted);
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.public-screen-picker-trigger strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:14px;
+}
+.public-screen-picker-chevron{
+  flex:none;
+  color:var(--blue);
+  font-size:22px;
+  font-weight:950;
+  transform:translateY(-2px);
+  transition:transform .15s ease;
+}
+.public-screen-picker.is-open .public-screen-picker-chevron{
+  transform:rotate(180deg) translateY(2px);
+}
+
+.public-screen-picker-panel{
+  position:absolute;
+  z-index:40;
+  top:calc(100% + 8px);
+  left:0;
+  right:0;
+  overflow:hidden;
+  border:1px solid #d4ddea;
+  border-radius:17px;
+  background:#fff;
+  box-shadow:0 18px 48px rgba(22,33,55,.18);
+}
+.public-screen-picker-panel[hidden]{
+  display:none!important;
+}
+.public-screen-picker-panel-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding:13px 14px;
+  border-bottom:1px solid var(--line);
+  background:#fafcff;
+}
+.public-screen-picker-panel-head>div{
+  display:grid;
+  gap:3px;
+}
+.public-screen-picker-panel-head strong{
+  font-size:14px;
+}
+.public-screen-picker-panel-head small{
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.4;
+}
+.public-screen-picker-close{
+  width:34px;
+  height:34px;
+  flex:none;
+  border:1px solid var(--line);
+  border-radius:50%;
+  background:#fff;
+  color:var(--ink);
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+}
+.public-screen-options{
+  max-height:330px;
+  overflow-y:auto;
+  padding:8px;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.public-screen-option{
+  position:relative;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  min-height:64px;
+  padding:11px 12px;
+  border:1px solid transparent;
+  border-radius:13px;
+  cursor:pointer;
+  transition:.12s ease;
+}
+.public-screen-option:hover{
+  background:#f8faff;
+}
+.public-screen-option.is-selected{
+  border-color:#b9caef;
+  background:#f3f7ff;
+}
+.public-screen-option.is-full{
+  cursor:not-allowed;
+  background:#f7f7f6;
+  opacity:.68;
+}
+.public-screen-option input{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.public-screen-option-check{
+  display:grid;
+  place-items:center;
+  width:24px;
+  height:24px;
+  border:1px solid #c6cfdf;
+  border-radius:7px;
+  background:#fff;
+  color:transparent;
+  font-size:12px;
+  font-weight:950;
+}
+.public-screen-option.is-selected .public-screen-option-check{
+  border-color:var(--blue);
+  background:var(--blue);
+  color:#fff;
+}
+.public-screen-option.is-full .public-screen-option-check{
+  background:#eceae6;
+  border-color:#d8d4cc;
+}
+.public-screen-option-copy{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+.public-screen-option-copy strong{
+  font-size:13px;
+  line-height:1.25;
+}
+.public-screen-option-copy small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:10px;
+}
+.public-screen-option-status{
+  display:inline-flex;
+  min-height:25px;
+  align-items:center;
+  padding:0 8px;
+  border-radius:999px;
+  background:#eaf6ed;
+  color:#2b7442;
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.03em;
+}
+.public-screen-option-status.is-full{
+  background:#f5dddd;
+  color:#943b3b;
+}
+.public-screen-full-note{
+  grid-column:2 / -1;
+  margin-top:-2px;
+  color:#9b5757;
+  font-size:10px;
+  font-weight:750;
+}
+.public-screen-picker-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border-top:1px solid var(--line);
+  background:#fafafa;
+}
+.public-screen-picker-footer>span{
+  color:var(--muted);
+  font-size:11px;
+  font-weight:850;
+}
+.public-screen-picker-done{
+  min-height:38px;
+  padding:0 14px;
+}
+.public-screen-picker-empty{
+  padding:22px 14px;
+  color:var(--muted);
+  text-align:center;
+  font-size:12px;
+}
+.screen-picker-help{
+  margin:8px 0 0;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.45;
+}
+.screen-picker-help.is-warning{
+  color:#9a651f;
+  font-weight:800;
+}
+
+@media(max-width:620px){
+  .public-screen-picker-panel{
+    position:fixed;
+    z-index:150;
+    left:10px;
+    right:10px;
+    top:auto;
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    max-height:calc(100dvh - 20px - env(safe-area-inset-bottom));
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr) auto;
+  }
+  .public-screen-options{
+    max-height:none;
+  }
+  .public-screen-option{
+    grid-template-columns:28px minmax(0,1fr);
+  }
+  .public-screen-option-status{
+    grid-column:2;
+    justify-self:start;
+  }
+  .public-screen-full-note{
+    grid-column:2;
+  }
+}
+
+@supports not (height:100dvh){
+  @media(max-width:620px){
+    .public-screen-picker-panel{
+      max-height:calc(100vh - 20px);
+    }
+  }
+}

@@ -28,12 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   const params = new URLSearchParams(window.location.search);
-  const locationParam = params.get('location');
-  const locationsInput = document.querySelector('input[name="locations"]');
-  if (locationParam && locationsInput && !locationsInput.value) {
-    locationsInput.value = locationParam;
-  }
-
+  const locationParam = (params.get('location') || '').trim();
   const packageParam = (params.get('package') || '').toLowerCase();
   const packageSelect = document.querySelector('select[name="package"]');
 
@@ -78,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // v4.8: live price summary. Payment happens only after manual approval.
   const summaryPackage = document.querySelector('[data-summary-package]');
+  const summaryScreens = document.querySelector('[data-summary-screens]');
   const summaryDesign = document.querySelector('[data-summary-design]');
   const summaryTotal = document.querySelector('[data-summary-total]');
   const summaryNote = document.querySelector('[data-summary-note]');
@@ -92,6 +88,357 @@ document.addEventListener('DOMContentLoaded', () => {
     static: { label: 'Статична визия — +€3 еднократно', price: 3 },
     video: { label: 'Анимирана рекламна визия — +€10 еднократно', price: 10 }
   };
+
+  // v5.2 — required package-aware screen selection.
+  // In this static demo, capacity is read from the same browser's localStorage.
+  const PUBLIC_SCREENS_KEY = 'ks_screens_v1';
+  const PUBLIC_REQUESTS_KEY = 'ks_demo_requests_v1';
+  const PUBLIC_CLIENT_SLOT_LIMIT = 9;
+
+  const DEFAULT_PUBLIC_SCREENS = [
+    {id:'funeral', name:'Траурна агенция', description:'Пилотен екран', active:true},
+    {id:'pharmacy', name:'Аптека', description:'Планирана локация', active:true},
+    {id:'restaurant', name:'Заведение', description:'Планирана локация', active:true}
+  ];
+
+  const PACKAGE_SCREEN_RULES = {
+    single:{min:1,max:1,label:'SINGLE — избери точно 1 екран'},
+    local:{min:1,max:3,label:'LOCAL — избери от 1 до 3 екрана'},
+    city:{min:4,max:5,label:'CITY — избери 4 или 5 екрана'}
+  };
+
+  const screenPicker = document.getElementById('publicScreenPicker');
+  const screenPickerTrigger = document.getElementById('publicScreenPickerTrigger');
+  const screenPickerPanel = document.getElementById('publicScreenPickerPanel');
+  const screenPickerClose = document.getElementById('publicScreenPickerClose');
+  const screenPickerDone = document.getElementById('publicScreenPickerDone');
+  const screenPickerValue = document.getElementById('publicScreenPickerValue');
+  const screenPickerRule = document.getElementById('publicScreenPickerRule');
+  const screenPickerHelp = document.getElementById('publicScreenPickerHelp');
+  const screenPickerCount = document.getElementById('publicScreenPickerCount');
+  const screenOptions = document.getElementById('publicScreenOptions');
+  const selectedScreenNamesInput = document.getElementById('selectedScreenNames');
+  const selectedScreenIdsInput = document.getElementById('selectedScreenIds');
+
+  let publicSelectedScreenIds = [];
+  let pendingLocationParam = locationParam;
+
+  function loadPublicScreens(){
+    try{
+      const stored = JSON.parse(localStorage.getItem(PUBLIC_SCREENS_KEY) || 'null');
+      if (Array.isArray(stored) && stored.length){
+        return stored.map(screen => {
+          let status = String(screen?.status || '').trim();
+          if (!['hidden','published','stopped'].includes(status)){
+            status = screen?.active === false ? 'stopped' : 'published';
+          }
+          return {
+            id:String(screen?.id || '').trim(),
+            name:String(screen?.name || 'Екран').trim(),
+            address:String(screen?.address || '').trim(),
+            description:String(screen?.description || '').trim(),
+            status
+          };
+        }).filter(screen => screen.id && screen.name);
+      }
+    }catch(e){}
+
+    return DEFAULT_PUBLIC_SCREENS.map(screen => ({
+      ...screen,
+      status:screen.active === false ? 'stopped' : 'published',
+      address:''
+    }));
+  }
+
+  function loadPublicRequests(){
+    try{
+      const requests = JSON.parse(localStorage.getItem(PUBLIC_REQUESTS_KEY) || '[]');
+      return Array.isArray(requests) ? requests : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function publicRequestOccupiesSlot(request){
+    if (!request || ['done','rejected'].includes(String(request.status || ''))) return false;
+
+    if (request.status === 'active' && request.expiresAt){
+      const expires = new Date(request.expiresAt);
+      if (!Number.isNaN(expires.getTime()) && expires <= new Date()) return false;
+    }
+    return true;
+  }
+
+  function publicScreenCapacity(screenId){
+    const occupied = loadPublicRequests().filter(request =>
+      publicRequestOccupiesSlot(request) &&
+      (request.assignedScreens || []).includes(screenId)
+    ).length;
+
+    return {
+      occupied,
+      full:occupied >= PUBLIC_CLIENT_SLOT_LIMIT
+    };
+  }
+
+  function publishedPublicScreens(){
+    return loadPublicScreens().filter(screen => screen.status === 'published');
+  }
+
+  function publicPackageRule(){
+    return PACKAGE_SCREEN_RULES[packageSelect?.value || ''] || null;
+  }
+
+  function selectedPublicScreens(){
+    const screens = publishedPublicScreens();
+    const byId = new Map(screens.map(screen => [screen.id,screen]));
+    return publicSelectedScreenIds.map(id => byId.get(id)).filter(Boolean);
+  }
+
+  function closePublicScreenPicker(){
+    if (!screenPickerPanel || screenPickerPanel.hidden) return;
+    screenPickerPanel.hidden = true;
+    screenPickerTrigger?.setAttribute('aria-expanded','false');
+    screenPicker?.classList.remove('is-open');
+  }
+
+  function openPublicScreenPicker(){
+    if (!screenPickerTrigger || screenPickerTrigger.disabled || !screenPickerPanel) return;
+    renderPublicScreenOptions();
+    screenPickerPanel.hidden = false;
+    screenPickerTrigger.setAttribute('aria-expanded','true');
+    screenPicker?.classList.add('is-open');
+  }
+
+  function screenRuleText(rule){
+    return rule ? rule.label : 'Избери пакет, за да видиш лимита.';
+  }
+
+  function syncSelectedScreenFields(){
+    const selected = selectedPublicScreens();
+    const names = selected.map(screen => screen.name);
+
+    if (selectedScreenNamesInput) selectedScreenNamesInput.value = names.join(' + ');
+    if (selectedScreenIdsInput) selectedScreenIdsInput.value = selected.map(screen => screen.id).join(',');
+
+    if (screenPickerValue){
+      screenPickerValue.textContent = names.length
+        ? (names.length <= 2 ? names.join(' + ') : `${names.length} избрани екрана`)
+        : (packageSelect?.value ? 'Избери екрани' : 'Първо избери пакет');
+    }
+
+    if (screenPickerCount){
+      screenPickerCount.textContent = `${names.length} ${names.length === 1 ? 'избран' : 'избрани'}`;
+    }
+
+    if (summaryScreens){
+      summaryScreens.textContent = names.length ? names.join(', ') : 'Не са избрани';
+    }
+  }
+
+  function publicAvailableScreenCount(){
+    return publishedPublicScreens().filter(screen => !publicScreenCapacity(screen.id).full).length;
+  }
+
+  function updatePublicScreenHelp(){
+    const rule = publicPackageRule();
+    if (!screenPickerHelp || !screenPickerRule) return;
+
+    if (!rule){
+      screenPickerHelp.textContent = 'Първо избери пакет.';
+      screenPickerRule.textContent = 'Избери пакет, за да видиш лимита.';
+      return;
+    }
+
+    screenPickerRule.textContent = rule.label;
+
+    const available = publicAvailableScreenCount();
+    if ((packageSelect?.value === 'city') && available < rule.min){
+      screenPickerHelp.textContent = `CITY изисква 4–5 свободни екрана. В момента са достъпни ${available}.`;
+      screenPickerHelp.classList.add('is-warning');
+    }else{
+      screenPickerHelp.textContent = `${rule.label}. Пълните екрани се виждат, но не могат да бъдат избрани.`;
+      screenPickerHelp.classList.remove('is-warning');
+    }
+  }
+
+  function trimSelectionToPackage(){
+    const rule = publicPackageRule();
+    if (!rule){
+      publicSelectedScreenIds = [];
+      return;
+    }
+
+    // Remove hidden/stopped/deleted/full screens from the current selection.
+    const published = new Set(publishedPublicScreens().map(screen => screen.id));
+    publicSelectedScreenIds = publicSelectedScreenIds.filter(id =>
+      published.has(id) && !publicScreenCapacity(id).full
+    );
+
+    if (publicSelectedScreenIds.length > rule.max){
+      publicSelectedScreenIds = publicSelectedScreenIds.slice(0,rule.max);
+      showToast(`Пакет ${packageSelect.value.toUpperCase()} позволява максимум ${rule.max} ${rule.max === 1 ? 'екран' : 'екрана'}.`);
+    }
+  }
+
+  function tryApplyLocationParam(){
+    if (!pendingLocationParam || !publicPackageRule()) return;
+
+    const target = publishedPublicScreens().find(screen =>
+      screen.name.toLocaleLowerCase('bg-BG') === pendingLocationParam.toLocaleLowerCase('bg-BG') ||
+      screen.id.toLocaleLowerCase('bg-BG') === pendingLocationParam.toLocaleLowerCase('bg-BG')
+    );
+
+    if (!target){
+      pendingLocationParam = '';
+      return;
+    }
+
+    if (publicScreenCapacity(target.id).full){
+      showToast(`„${target.name}“ в момента няма свободни рекламни позиции.`);
+      pendingLocationParam = '';
+      return;
+    }
+
+    const rule = publicPackageRule();
+    if (rule.max === 1){
+      publicSelectedScreenIds = [target.id];
+    }else if (!publicSelectedScreenIds.includes(target.id) && publicSelectedScreenIds.length < rule.max){
+      publicSelectedScreenIds.push(target.id);
+    }
+    pendingLocationParam = '';
+  }
+
+  function renderPublicScreenOptions(){
+    if (!screenOptions) return;
+    const rule = publicPackageRule();
+    const screens = publishedPublicScreens();
+
+    if (!rule){
+      screenOptions.innerHTML = '<div class="public-screen-picker-empty">Първо избери пакет.</div>';
+      return;
+    }
+
+    if (!screens.length){
+      screenOptions.innerHTML = '<div class="public-screen-picker-empty">В момента няма публикувани екрани.</div>';
+      return;
+    }
+
+    screenOptions.innerHTML = screens.map(screen => {
+      const capacity = publicScreenCapacity(screen.id);
+      const selected = publicSelectedScreenIds.includes(screen.id);
+      const location = screen.address || screen.description || 'Кюстендил';
+
+      return `
+        <label class="public-screen-option ${capacity.full ? 'is-full' : ''} ${selected ? 'is-selected' : ''}">
+          <input type="checkbox"
+                 data-public-screen-id="${screen.id.replace(/"/g,'&quot;')}"
+                 ${selected ? 'checked' : ''}
+                 ${capacity.full ? 'disabled' : ''}>
+          <span class="public-screen-option-check">✓</span>
+          <span class="public-screen-option-copy">
+            <strong>${screen.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong>
+            <small>${location.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</small>
+          </span>
+          <span class="public-screen-option-status ${capacity.full ? 'is-full' : ''}">
+            ${capacity.full ? 'ПЪЛЕН' : 'Свободен'}
+          </span>
+          ${capacity.full ? '<span class="public-screen-full-note">Временно няма свободни рекламни позиции</span>' : ''}
+        </label>`;
+    }).join('');
+
+    screenOptions.querySelectorAll('[data-public-screen-id]').forEach(input => {
+      input.addEventListener('change', () => {
+        const id = input.dataset.publicScreenId;
+        const activeRule = publicPackageRule();
+        if (!activeRule) return;
+
+        if (input.checked){
+          if (activeRule.max === 1){
+            publicSelectedScreenIds = [id];
+          }else if (!publicSelectedScreenIds.includes(id)){
+            if (publicSelectedScreenIds.length >= activeRule.max){
+              input.checked = false;
+              showToast(`Пакет ${packageSelect.value.toUpperCase()} позволява максимум ${activeRule.max} екрана.`);
+              return;
+            }
+            publicSelectedScreenIds.push(id);
+          }
+        }else{
+          publicSelectedScreenIds = publicSelectedScreenIds.filter(screenId => screenId !== id);
+        }
+
+        syncSelectedScreenFields();
+        renderPublicScreenOptions();
+        updatePublicScreenHelp();
+      });
+    });
+  }
+
+  function updatePublicScreenPickerForPackage(){
+    const rule = publicPackageRule();
+    if (screenPickerTrigger) screenPickerTrigger.disabled = !rule;
+
+    trimSelectionToPackage();
+    tryApplyLocationParam();
+    syncSelectedScreenFields();
+    updatePublicScreenHelp();
+    renderPublicScreenOptions();
+  }
+
+  function validatePublicScreenSelection(){
+    const rule = publicPackageRule();
+    if (!rule) return 'Избери пакет.';
+
+    // Re-check capacity at the exact moment of submission.
+    const blocked = publicSelectedScreenIds
+      .map(id => ({id, capacity:publicScreenCapacity(id)}))
+      .find(item => item.capacity.full);
+
+    if (blocked){
+      trimSelectionToPackage();
+      syncSelectedScreenFields();
+      renderPublicScreenOptions();
+      return 'Един от избраните екрани вече е пълен. Избери друг екран.';
+    }
+
+    const count = publicSelectedScreenIds.length;
+    if (count < rule.min){
+      if (rule.min === rule.max){
+        return `Пакет ${packageSelect.value.toUpperCase()} изисква точно ${rule.min} екран.`;
+      }
+      return `Пакет ${packageSelect.value.toUpperCase()} изисква ${rule.min}–${rule.max} екрана.`;
+    }
+    if (count > rule.max){
+      return `Пакет ${packageSelect.value.toUpperCase()} позволява максимум ${rule.max} екрана.`;
+    }
+    return '';
+  }
+
+  screenPickerTrigger?.addEventListener('click', () => {
+    if (screenPickerPanel.hidden) openPublicScreenPicker();
+    else closePublicScreenPicker();
+  });
+  screenPickerClose?.addEventListener('click', closePublicScreenPicker);
+  screenPickerDone?.addEventListener('click', closePublicScreenPicker);
+
+  document.addEventListener('pointerdown', event => {
+    if (!screenPicker || screenPickerPanel?.hidden) return;
+    if (!screenPicker.contains(event.target)) closePublicScreenPicker();
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closePublicScreenPicker();
+  });
+
+  window.addEventListener('storage', event => {
+    if ([PUBLIC_SCREENS_KEY,PUBLIC_REQUESTS_KEY].includes(event.key)){
+      trimSelectionToPackage();
+      syncSelectedScreenFields();
+      updatePublicScreenHelp();
+      renderPublicScreenOptions();
+    }
+  });
 
   function updateOrderSummary(){
     if (!summaryPackage || !summaryDesign || !summaryTotal) return;
@@ -135,7 +482,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  if (packageSelect) packageSelect.addEventListener('change', updateOrderSummary);
+  if (packageSelect) {
+    packageSelect.addEventListener('change', () => {
+      updatePublicScreenPickerForPackage();
+      updateOrderSummary();
+    });
+  }
   designRadios.forEach(radio => radio.addEventListener('change', updateOrderSummary));
 
   // Apply package coming from SINGLE / LOCAL / CITY buttons only after listeners exist.
@@ -143,8 +495,12 @@ document.addEventListener('DOMContentLoaded', () => {
     packageSelect.value = packageParam;
     packageSelect.dispatchEvent(new Event('change', { bubbles: true }));
   }
+  updatePublicScreenPickerForPackage();
   updateOrderSummary();
-  setTimeout(updateOrderSummary, 0);
+  setTimeout(() => {
+    updatePublicScreenPickerForPackage();
+    updateOrderSummary();
+  }, 0);
 
   // v5.0 — technical check for final advertising files.
   // Hard errors block submission; warnings are allowed but clearly shown.
@@ -386,6 +742,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const design = checkedDesign ? designData[checkedDesign.dataset.designType] : null;
       if (!pkg || !design) {
         showToast('Избери пакет и рекламна визия.');
+        return;
+      }
+
+      const screenSelectionError = validatePublicScreenSelection();
+      if (screenSelectionError){
+        showToast(screenSelectionError);
+        screenPickerHelp?.scrollIntoView({behavior:'smooth', block:'center'});
+        openPublicScreenPicker();
         return;
       }
 

@@ -100,6 +100,10 @@
         designPrice:orderData.designPrice,
         total:orderData.total,
         locations:value(form,'locations'),
+        preferredScreenIds:value(form,'preferred_screen_ids')
+          .split(',')
+          .map(x => x.trim())
+          .filter(Boolean),
         message:value(form,'message'),
         creativeText,
         creativeContact,
