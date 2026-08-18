@@ -52,9 +52,7 @@
   };
 
   const FIXED_SLOT_SECONDS = 10;
-  const CLIENT_SLOT_LIMIT = 9;
-  const HOUSE_SLOT_LIMIT = 1;
-  const HOUSE_CREATIVE_LIMIT = 9;
+  const TOTAL_SCREEN_SLOT_LIMIT = 10;
 
   const DEFAULT_SCREEN_CATALOG = [
     {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:''},
@@ -287,17 +285,6 @@
     );
   }
 
-  function screenClientCapacity(screenId, excludeRequestId=null){
-    const occupied = screenClientReservations(screenId, excludeRequestId).length;
-    return {
-      occupied,
-      limit:CLIENT_SLOT_LIMIT,
-      remaining:Math.max(0, CLIENT_SLOT_LIMIT - occupied),
-      full:occupied >= CLIENT_SLOT_LIMIT,
-      almostFull:occupied === CLIENT_SLOT_LIMIT - 1
-    };
-  }
-
   function screenHouseReservations(screenId, excludeAdId=null){
     return loadInternalAds().filter(ad =>
       ad.id !== excludeAdId &&
@@ -306,53 +293,19 @@
     );
   }
 
-  function screenHouseCapacity(screenId, excludeAdId=null){
-    const occupied = screenHouseReservations(screenId, excludeAdId).length;
+  function screenTotalCapacity(screenId, {excludeRequestId=null, excludeAdId=null} = {}){
+    const clients = screenClientReservations(screenId, excludeRequestId).length;
+    const house = screenHouseReservations(screenId, excludeAdId).length;
+    const occupied = clients + house;
+
     return {
+      clients,
+      house,
       occupied,
-      limit:HOUSE_CREATIVE_LIMIT,
-      remaining:Math.max(0, HOUSE_CREATIVE_LIMIT - occupied),
-      full:occupied >= HOUSE_CREATIVE_LIMIT,
-      slotOccupied:occupied > 0
-    };
-  }
-
-  function isHouseSlot(item){
-    return Boolean(item?.houseSlot);
-  }
-
-  function houseSlotId(screenId){
-    return `KS-HOUSE-SLOT-${screenId}`;
-  }
-
-  function buildHouseSlotItem(screenId){
-    const ads = screenHouseReservations(screenId)
-      .sort((a,b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-
-    if (!ads.length) return null;
-
-    const rawSettings = ads.map(ad => getScreenSetting(ad, screenId));
-    const orders = rawSettings.map(s => s.order).filter(v => v !== null);
-    const order = orders.length ? Math.min(...orders) : null;
-    const paused = rawSettings.length ? rawSettings.every(s => s.paused) : false;
-
-    return {
-      id:houseSlotId(screenId),
-      internalAd:true,
-      houseSlot:true,
-      houseScreenId:screenId,
-      title:'Наш рекламен слот',
-      houseAds:ads,
-      file:ads[0]?.file || null,
-      active:true,
-      createdAt:ads[0]?.createdAt || new Date().toISOString(),
-      screenSettings:{
-        [screenId]:{
-          duration:FIXED_SLOT_SECONDS,
-          paused,
-          order
-        }
-      }
+      limit:TOTAL_SCREEN_SLOT_LIMIT,
+      remaining:Math.max(0, TOTAL_SCREEN_SLOT_LIMIT - occupied),
+      full:occupied >= TOTAL_SCREEN_SLOT_LIMIT,
+      almostFull:occupied === TOTAL_SCREEN_SLOT_LIMIT - 1
     };
   }
 
@@ -387,7 +340,7 @@
   }
 
   function screenLimitText(r){
-    const capacityNote = ` Всеки екран има максимум ${CLIENT_SLOT_LIMIT} клиентски позиции по ${FIXED_SLOT_SECONDS} сек.; пълен екран не може да бъде избран.`;
+    const capacityNote = ` Всеки екран има максимум ${TOTAL_SCREEN_SLOT_LIMIT} активни реклами общо по ${FIXED_SLOT_SECONDS} сек.; пълен екран не може да бъде избран.`;
     if (r.package === 'single') return 'SINGLE: избери точно 1 публикуван екран.' + capacityNote;
     if (r.package === 'local') return 'LOCAL: избери от 1 до 3 публикувани екрана.' + capacityNote;
     const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
@@ -402,7 +355,7 @@
     const count = valid.length;
 
     if (valid.length !== assigned.length) return false;
-    if (valid.some(id => screenClientCapacity(id, r.id).full)) return false;
+    if (valid.some(id => screenTotalCapacity(id, {excludeRequestId:r.id}).full)) return false;
 
     if (r.package === 'single') return count === 1;
     if (r.package === 'local') return count >= 1 && count <= 3;
@@ -485,9 +438,6 @@
   }
 
   function campaignCreative(r){
-    if (isHouseSlot(r)){
-      return r.houseAds?.find(ad => ad?.file?.key)?.file || null;
-    }
     if (r?.internalAd && r.file?.key) return r.file;
     if (r?.finalCreative?.key) return r.finalCreative;
     const files = r?.files || [];
@@ -515,26 +465,6 @@
   }
 
   function savePlaylistItem(item){
-    if (isHouseSlot(item)){
-      const screenId = item.houseScreenId;
-      if (!screenId) return;
-      const setting = getScreenSetting(item, screenId);
-      const ads = loadInternalAds();
-
-      ads.forEach(ad => {
-        if (ad.active === false || !(ad.assignedScreens || []).includes(screenId)) return;
-        if (!ad.screenSettings) ad.screenSettings = {};
-        ad.screenSettings[screenId] = {
-          duration:FIXED_SLOT_SECONDS,
-          paused:Boolean(setting.paused),
-          order:setting.order
-        };
-      });
-
-      saveInternalAds(ads);
-      return;
-    }
-
     if (isInternalAd(item)){
       const ads = loadInternalAds();
       const index = ads.findIndex(x => x.id === item.id);
@@ -549,17 +479,13 @@
   }
 
   function findPlaylistItem(id){
-    if (String(id || '').startsWith('KS-HOUSE-SLOT-')){
-      const screenId = String(id).slice('KS-HOUSE-SLOT-'.length);
-      return buildHouseSlotItem(screenId);
-    }
     return loadRequests().find(x => x.id === id) || loadInternalAds().find(x => x.id === id) || null;
   }
 
   function allPlaylistItems(screenId){
     const requests = screenPlaylistRequests(screenId);
-    const houseSlot = buildHouseSlotItem(screenId);
-    const combined = [...requests, ...(houseSlot ? [houseSlot] : [])];
+    const ads = loadInternalAds().filter(ad => ad.active !== false && (ad.assignedScreens || []).includes(screenId));
+    const combined = [...requests, ...ads];
 
     const used = combined.map(x => getScreenSetting(x,screenId).order).filter(v => v !== null);
     let next = used.length ? Math.max(...used) + 1 : 1;
@@ -2199,11 +2125,15 @@
         if(!title){ error.textContent='Напиши име на рекламата.'; error.hidden=false; return; }
         if(!screens.length){ error.textContent='Избери поне един екран.'; error.hidden=false; return; }
 
-        const blockedHouseScreen = screens
-          .map(screenId => ({screen:screenById(screenId), capacity:screenHouseCapacity(screenId, current?.id || null)}))
+        const blockedScreen = screens
+          .map(screenId => ({
+            screen:screenById(screenId),
+            capacity:screenTotalCapacity(screenId,{excludeAdId:current?.id || null})
+          }))
           .find(x => x.capacity.full);
-        if(blockedHouseScreen){
-          error.textContent=`„${blockedHouseScreen.screen?.name || 'Екран'}“ вече има 9/9 собствени визии в нашия рекламен слот. Премахни или спри някоя от тях.`;
+
+        if(blockedScreen){
+          error.textContent=`„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами. Премахни или спри реклама, или избери друг екран.`;
           error.hidden=false;
           return;
         }
@@ -2275,15 +2205,15 @@
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
     const selected=new Set(existing?.assignedScreens||[]);
     dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>{
-      const houseCapacity=screenHouseCapacity(screen.id, existing?.id || null);
-      const disabled=!isScreenPublished(screen) || houseCapacity.full;
+      const capacity=screenTotalCapacity(screen.id,{excludeAdId:existing?.id || null});
+      const disabled=!isScreenPublished(screen) || capacity.full;
       return `
-      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${houseCapacity.full?'is-screen-full':''}">
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.full?'is-screen-full':''}">
         <input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${disabled?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:houseCapacity.full?' · НАШИТЕ ВИЗИИ СА ПЪЛНИ':''}</strong>
-          <small>${esc(screen.address || screen.description || 'Без адрес')} · Наши визии ${houseCapacity.occupied}/${HOUSE_CREATIVE_LIMIT} · въртят се в 1×10 сек. слот</small>
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:capacity.full?' · ПЪЛЕН':''}</strong>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · Общо реклами ${capacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT} · клиентски ${capacity.clients} · наши ${capacity.house}</small>
         </span>
       </label>`;
     }).join('');
@@ -2300,10 +2230,13 @@
 
     if(ad.active===false){
       const blocked=(ad.assignedScreens||[])
-        .map(screenId=>({screen:screenById(screenId),capacity:screenHouseCapacity(screenId,ad.id)}))
+        .map(screenId=>({
+          screen:screenById(screenId),
+          capacity:screenTotalCapacity(screenId,{excludeAdId:ad.id})
+        }))
         .find(x=>x.capacity.full);
       if(blocked){
-        toast(`„${blocked.screen?.name || 'Екран'}“ вече има 9/9 активни собствени визии. Първо освободи една от тях.`);
+        toast(`„${blocked.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами.`);
         return;
       }
       ad.active=true;
@@ -2340,8 +2273,7 @@
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
       const rotationStats = screenRotationStats(screen.id);
       const readiness = screenReadiness(screen.id);
-      const clientCapacity = screenClientCapacity(screen.id);
-      const houseCapacity = screenHouseCapacity(screen.id);
+      const totalCapacity = screenTotalCapacity(screen.id);
 
       const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
       const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
@@ -2373,15 +2305,15 @@
               <div><span>Пауза</span><strong>${paused}</strong></div>
             </div>
 
-            <div class="screen-capacity-card ${screenCapacityClass(clientCapacity)}">
+            <div class="screen-capacity-card ${screenCapacityClass(totalCapacity)}">
               <div class="screen-capacity-head">
-                <span><small>Клиентски позиции</small><strong>${clientCapacity.occupied}/${CLIENT_SLOT_LIMIT}</strong></span>
-                <b>${screenCapacityLabel(clientCapacity)}</b>
+                <span><small>Общо активни реклами</small><strong>${totalCapacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT}</strong></span>
+                <b>${screenCapacityLabel(totalCapacity)}</b>
               </div>
-              <div class="screen-capacity-progress"><i style="width:${Math.min(100,(clientCapacity.occupied/CLIENT_SLOT_LIMIT)*100)}%"></i></div>
+              <div class="screen-capacity-progress"><i style="width:${Math.min(100,(totalCapacity.occupied/TOTAL_SCREEN_SLOT_LIMIT)*100)}%"></i></div>
               <div class="screen-capacity-foot">
-                <span>Наш слот: ${houseCapacity.slotOccupied ? 1 : 0}/${HOUSE_SLOT_LIMIT} · визии ${houseCapacity.occupied}/${HOUSE_CREATIVE_LIMIT}</span>
-                <span>Макс. цикъл: ${(CLIENT_SLOT_LIMIT + HOUSE_SLOT_LIMIT) * FIXED_SLOT_SECONDS} сек.</span>
+                <span>Клиентски: ${totalCapacity.clients} · Наши: ${totalCapacity.house}</span>
+                <span>Макс. цикъл: ${TOTAL_SCREEN_SLOT_LIMIT * FIXED_SLOT_SECONDS} сек.</span>
               </div>
             </div>
 
@@ -2414,16 +2346,12 @@
               ${active.length ? active.slice(0,3).map(r => {
                 const setting = getScreenSetting(r, screen.id);
                 return `
-                <button class="screen-campaign-row ${setting.paused ? 'is-paused' : ''}" ${isHouseSlot(r)?`data-open-playlist="${esc(screen.id)}"`:isInternalAd(r)?`data-edit-internal-ad="${esc(r.id)}"`:`data-open-request="${esc(r.id)}"`}>
+                <button class="screen-campaign-row ${setting.paused ? 'is-paused' : ''}" ${isInternalAd(r)?`data-edit-internal-ad="${esc(r.id)}"`:`data-open-request="${esc(r.id)}"`}>
                   <span>
-                    <strong>${isHouseSlot(r)
-                      ? `KS · Наш слот · ${r.houseAds?.length || 0} визии`
-                      : isInternalAd(r)
-                        ? `KS · ${esc(r.title||'Собствена реклама')}`
-                        : `${esc(r.id)} · ${esc(r.company || 'Кампания')}`}</strong>
-                    <small>${setting.paused ? 'Пауза · ' : ''}${setting.duration} сек.${isHouseSlot(r)?' · визиите се редуват':isInternalAd(r)?'':` · до ${formatDateOnly(r.expiresAt)}`}</small>
+                    <strong>${isInternalAd(r)?`KS · ${esc(r.title||'Собствена реклама')}`:`${esc(r.id)} · ${esc(r.company || 'Кампания')}`}</strong>
+                    <small>${setting.paused ? 'Пауза · ' : ''}${setting.duration} сек.${isInternalAd(r)?'':` · до ${formatDateOnly(r.expiresAt)}`}</small>
                   </span>
-                  <b>${isHouseSlot(r)?'Playlist →':isInternalAd(r)?'Редактирай →':'Отвори →'}</b>
+                  <b>${isInternalAd(r)?'Редактирай →':'Отвори →'}</b>
                 </button>`;
               }).join('') : '<div class="screen-campaign-empty">Този екран е свободен.</div>'}
               ${active.length > 3 ? `<div class="screen-more-count">+ още ${active.length - 3}</div>` : ''}
@@ -2619,7 +2547,7 @@
     const stats = screenRotationStats(screenId);
 
     dialog.querySelector('#playlistSummary').innerHTML = `
-      <div><span>Активни позиции</span><strong>${items.length}</strong></div>
+      <div><span>Активни реклами</span><strong>${items.length}</strong></div>
       <div><span>В момента се излъчват</span><strong>${playing.length}</strong></div>
       <div><span>На пауза</span><strong>${pausedCount}</strong></div>
       <div><span>Общ цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
@@ -2650,7 +2578,7 @@
     const previewHint = dialog.querySelector('#broadcastPreviewHint');
     previewBtn.disabled = previewable === 0;
     previewHint.textContent = previewable
-      ? `${previewable} ${previewable === 1 ? 'позиция' : 'позиции'} · цикъл ${previewCycle} сек. · нашите визии се редуват в 1 позиция`
+      ? `${previewable} ${previewable === 1 ? 'реклама' : 'реклами'} · цикъл ${previewCycle} сек. · паузираните не участват`
       : 'Няма непаузирани реклами за преглед.';
 
     const itemsBox = dialog.querySelector('#playlistItems');
@@ -2681,18 +2609,14 @@
             <div class="playlist-copy">
               <div class="playlist-title-row">
                 <div>
-                  <span class="section-kicker">${isHouseSlot(r)?'НАШ РЕКЛАМЕН СЛОТ':isInternalAd(r)?'СОБСТВЕНА РЕКЛАМА':esc(r.id)}</span>
-                  <h3>${esc(isHouseSlot(r)?`Собствени реклами · ${r.houseAds?.length || 0} визии`:isInternalAd(r)?(r.title||'Собствена реклама'):(r.company || r.name || 'Кампания'))}</h3>
+                  <span class="section-kicker">${isInternalAd(r)?'СОБСТВЕНА РЕКЛАМА':esc(r.id)}</span>
+                  <h3>${esc(isInternalAd(r)?(r.title||'Собствена реклама'):(r.company || r.name || 'Кампания'))}</h3>
                 </div>
                 <span class="playlist-state ${setting.paused ? 'paused' : 'playing'}">${setting.paused ? 'ПАУЗА' : 'ИЗЛЪЧВА СЕ'}</span>
               </div>
 
               <div class="playlist-meta">
-                ${isHouseSlot(r)
-                  ? `<span>1×10 сек. запазена позиция</span><span>${r.houseAds?.length || 0} визии се редуват</span>`
-                  : isInternalAd(r)
-                    ? '<span>Без клиентска заявка</span><span>Без крайна дата</span>'
-                    : `<span>До ${formatDateOnly(r.expiresAt)}</span><span>${campaignTimeLeftText(r)}</span>`}
+                ${isInternalAd(r)?'<span>Без клиентска заявка</span><span>Без крайна дата</span>':`<span>До ${formatDateOnly(r.expiresAt)}</span><span>${campaignTimeLeftText(r)}</span>`}
               </div>
 
               ${setting.paused ? `
@@ -2718,11 +2642,7 @@
                   ${setting.paused ? 'Пусни отново' : 'Пауза само тук'}
                 </button>
 
-                ${isHouseSlot(r)
-                  ? `<button type="button" class="btn btn-light" data-manage-house-ads>Собствени реклами (${r.houseAds?.length || 0})</button>`
-                  : isInternalAd(r)
-                    ? `<button type="button" class="btn btn-light" data-edit-internal-ad="${esc(r.id)}">Редактирай</button>`
-                    : `<button type="button" class="btn btn-light" data-open-request="${esc(r.id)}">Заявка</button>`}
+                ${isInternalAd(r)?`<button type="button" class="btn btn-light" data-edit-internal-ad="${esc(r.id)}">Редактирай</button>`:`<button type="button" class="btn btn-light" data-open-request="${esc(r.id)}">Заявка</button>`}
               </div>
             </div>
           </article>`;
@@ -2743,7 +2663,6 @@
   let broadcastPreviewScreenId = null;
   let broadcastPreviewStartedAt = 0;
   let broadcastPreviewRemainingMs = 0;
-  let broadcastHouseRotation = {};
 
   function clearBroadcastPreviewTimer(){
     if (broadcastPreviewTimer){
@@ -2758,22 +2677,9 @@
   }
 
   function broadcastItemTitle(item){
-    if (isHouseSlot(item)) return 'Наш рекламен слот';
     return isInternalAd(item)
       ? (item.title || 'Собствена реклама')
       : (item.company || item.name || item.id || 'Кампания');
-  }
-
-  function nextHouseCreative(item){
-    const ads = item?.houseAds || [];
-    if (!ads.length) return {ad:null,index:0,total:0};
-
-    const key = item.houseScreenId || item.id;
-    const index = Number(broadcastHouseRotation[key] || 0) % ads.length;
-    const ad = ads[index];
-    broadcastHouseRotation[key] = (index + 1) % ads.length;
-
-    return {ad,index,total:ads.length};
   }
 
   function ensureBroadcastPreviewDialog(){
@@ -2834,7 +2740,6 @@
     dialog.querySelector('#broadcastRestartBtn').addEventListener('click', () => {
       broadcastPreviewIndex = 0;
       broadcastPreviewPaused = false;
-      broadcastHouseRotation = {};
       renderBroadcastPreviewItem();
     });
     dialog.querySelector('#broadcastPlayPauseBtn').addEventListener('click', toggleBroadcastPreviewPause);
@@ -2896,27 +2801,13 @@
     broadcastPreviewRemainingMs = durationMs;
     broadcastPreviewPaused = false;
 
-    let displayItem = item;
-    let houseInfo = null;
-
-    if (isHouseSlot(item)){
-      houseInfo = nextHouseCreative(item);
-      if (houseInfo.ad) displayItem = houseInfo.ad;
-    }
-
-    dialog.querySelector('#broadcastCurrentTitle').textContent =
-      isHouseSlot(item) && houseInfo?.ad
-        ? `Наш слот · ${houseInfo.ad.title || 'Собствена реклама'}`
-        : broadcastItemTitle(item);
-
+    dialog.querySelector('#broadcastCurrentTitle').textContent = broadcastItemTitle(item);
     dialog.querySelector('#broadcastCurrentMeta').textContent =
-      isHouseSlot(item)
-        ? `${broadcastPreviewIndex + 1} / ${broadcastPreviewItems.length} · ${setting.duration} сек. · наша визия ${houseInfo ? houseInfo.index + 1 : 0}/${houseInfo?.total || 0}`
-        : `${broadcastPreviewIndex + 1} / ${broadcastPreviewItems.length} · ${setting.duration} сек.${isInternalAd(item) ? ' · собствена реклама' : ` · ${item.id}`}`;
+      `${broadcastPreviewIndex + 1} / ${broadcastPreviewItems.length} · ${setting.duration} сек.${isInternalAd(item) ? ' · собствена реклама' : ` · ${item.id}`}`;
 
     dialog.querySelector('#broadcastPlayPauseBtn').textContent = 'Ⅱ Пауза';
 
-    const creative = campaignCreative(displayItem);
+    const creative = campaignCreative(item);
     stage.innerHTML = '<div class="broadcast-loading">Зареждане…</div>';
 
     let record = null;
@@ -2930,7 +2821,7 @@
       stage.innerHTML = `
         <div class="broadcast-empty">
           <span class="broadcast-empty-mark">KS</span>
-          <strong>${esc(isHouseSlot(item) && houseInfo?.ad ? (houseInfo.ad.title || 'Собствена реклама') : broadcastItemTitle(item))}</strong>
+          <strong>${esc(broadcastItemTitle(item))}</strong>
           <span>Файлът не е наличен в този demo браузър.</span>
         </div>`;
     }else{
@@ -3003,7 +2894,6 @@
     broadcastPreviewIndex = 0;
     broadcastPreviewPaused = false;
     broadcastPreviewScreenId = null;
-    broadcastHouseRotation = {};
 
     dialog.classList.remove('show');
 
@@ -3030,12 +2920,11 @@
     broadcastPreviewItems = items;
     broadcastPreviewIndex = 0;
     broadcastPreviewPaused = false;
-    broadcastHouseRotation = {};
 
     const dialog = ensureBroadcastPreviewDialog();
     dialog.querySelector('#broadcastScreenName').textContent = screen.name;
     dialog.querySelector('#broadcastCycleInfo').textContent =
-      `${items.length} ${items.length === 1 ? 'позиция' : 'позиции'} · общ цикъл ${items.reduce((sum,item) => sum + getScreenSetting(item, screenId).duration, 0)} сек.`;
+      `${items.length} ${items.length === 1 ? 'реклама' : 'реклами'} · общ цикъл ${items.reduce((sum,item) => sum + getScreenSetting(item, screenId).duration, 0)} сек.`;
 
     saveAdminOverlay('broadcast-preview', screenId);
     dialog.classList.add('show');
@@ -3572,10 +3461,10 @@
         }
 
         const blockedScreen = selected
-          .map(screenId => ({screen:screenById(screenId), capacity:screenClientCapacity(screenId, req.id)}))
+          .map(screenId => ({screen:screenById(screenId), capacity:screenTotalCapacity(screenId,{excludeRequestId:req.id})}))
           .find(x => x.capacity.full);
         if(blockedScreen){
-          error.textContent = `„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${CLIENT_SLOT_LIMIT}/${CLIENT_SLOT_LIMIT} клиентски позиции. Избери друг екран.`;
+          error.textContent = `„${blockedScreen.screen?.name || 'Екран'}“ е пълен — ${TOTAL_SCREEN_SLOT_LIMIT}/${TOTAL_SCREEN_SLOT_LIMIT} активни реклами. Избери друг екран.`;
           error.hidden = false;
           return;
         }
@@ -3619,7 +3508,7 @@
     const options = dialog.querySelector('#screenAssignmentOptions');
 
     options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => {
-      const capacity=screenClientCapacity(screen.id,r.id);
+      const capacity=screenTotalCapacity(screen.id,{excludeRequestId:r.id});
       const disabled=!isScreenPublished(screen) || capacity.full;
       return `
       <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''} ${capacity.full?'is-screen-full':''}">
@@ -3627,7 +3516,7 @@
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
           <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:capacity.full?' · ПЪЛЕН':''}</strong>
-          <small>${esc(screen.address || screen.description || 'Без адрес')} · Клиентски позиции ${capacity.occupied}/${CLIENT_SLOT_LIMIT}${capacity.almostFull?' · последно свободно място':''}</small>
+          <small>${esc(screen.address || screen.description || 'Без адрес')} · Общо реклами ${capacity.occupied}/${TOTAL_SCREEN_SLOT_LIMIT}${capacity.almostFull?' · последно свободно място':''}</small>
         </span>
       </label>`;
     }).join('');
@@ -3974,14 +3863,6 @@
 
     const deleteScreenBtn = e.target.closest('[data-delete-screen]');
     if (deleteScreenBtn) openDeleteScreenDialog(deleteScreenBtn.dataset.deleteScreen);
-
-    const manageHouseAds = e.target.closest('[data-manage-house-ads]');
-    if (manageHouseAds){
-      closeScreenPlaylist();
-      setTimeout(() => {
-        document.getElementById('internalAdsPanel')?.scrollIntoView({behavior:'smooth', block:'start'});
-      }, 80);
-    }
 
     const editInternal = e.target.closest('[data-edit-internal-ad]');
     if (editInternal) openInternalAdDialog(editInternal.dataset.editInternalAd);
