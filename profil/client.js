@@ -34,8 +34,15 @@
   }
 
   function assignedNames(r){
-    const map = new Map(loadClientScreens().map(s => [s.id,s.name]));
-    return (r.assignedScreens || []).map(id => map.get(id) || fallbackScreens[id]).filter(Boolean);
+    const screens = loadClientScreens();
+    const map = new Map(screens.map(s => [s.id,s]));
+    return (r.assignedScreens || [])
+      .map(id => {
+        const screen = map.get(id);
+        if (screen?.status === 'hidden') return null;
+        return screen?.name || fallbackScreens[id] || null;
+      })
+      .filter(Boolean);
   }
 
   function esc(v=''){
