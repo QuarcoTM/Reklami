@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#fbf8f1">
-  <link rel="stylesheet" href="client.css?v=2.2">
+  <link rel="stylesheet" href="client.css?v=3.1">
   <title>Моят профил — Kyustendil Screen</title>
   <meta name="robots" content="noindex,nofollow,noarchive">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
@@ -23,7 +23,8 @@
       <p>Въведи email адреса, с който си изпратил заявката си.</p>
 
       <form id="clientLoginForm">
-        <label for="clientEmail">Email</label>
+        <p class="client-required-note"><span>*</span> – задължително поле</p>
+        <label for="clientEmail">Email <span class="client-required-star">*</span></label>
         <input id="clientEmail" name="email" type="email" autocomplete="email" placeholder="email@example.com" required>
         <button class="btn btn-blue btn-full" type="submit">Влез в профила</button>
       </form>
