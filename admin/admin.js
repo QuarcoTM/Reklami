@@ -508,6 +508,8 @@
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem('ks_admin_state_v1');
     sessionStorage.removeItem('ks_admin_trail_v1');
+    sessionStorage.removeItem('ks_admin_overlay_v1');
+    sessionStorage.removeItem('ks_admin_request_search_v1');
     location.reload();
   });
 
@@ -515,6 +517,8 @@
   // We keep our own trail instead of relying on the browser's mixed page history.
   const ADMIN_STATE_KEY = 'ks_admin_state_v1';
   const ADMIN_TRAIL_KEY = 'ks_admin_trail_v1';
+  const ADMIN_OVERLAY_KEY = 'ks_admin_overlay_v1';
+  const ADMIN_SEARCH_KEY = 'ks_admin_request_search_v1';
   const titles = {dashboard:'Табло',requests:'Заявки',clients:'Клиенти',screens:'Екрани',creatives:'Материали'};
   let adminTrail = [];
   let currentAdminState = {view:'dashboard', statusFilter:'all', requestId:null};
@@ -559,6 +563,80 @@
         .slice(-40);
     }catch(e){
       return [];
+    }
+  }
+
+  function saveAdminOverlay(type=null, id=null){
+    try{
+      if (!type){
+        sessionStorage.removeItem(ADMIN_OVERLAY_KEY);
+        return;
+      }
+      sessionStorage.setItem(ADMIN_OVERLAY_KEY, JSON.stringify({
+        type,
+        id:id ?? null
+      }));
+    }catch(e){}
+  }
+
+  function loadAdminOverlay(){
+    try{
+      const raw = JSON.parse(sessionStorage.getItem(ADMIN_OVERLAY_KEY) || 'null');
+      if (!raw?.type) return null;
+      return {type:String(raw.type), id:raw.id ?? null};
+    }catch(e){
+      return null;
+    }
+  }
+
+  function clearAdminOverlay(type=null){
+    try{
+      if (!type){
+        sessionStorage.removeItem(ADMIN_OVERLAY_KEY);
+        return;
+      }
+      const current = loadAdminOverlay();
+      if (current?.type === type) sessionStorage.removeItem(ADMIN_OVERLAY_KEY);
+    }catch(e){}
+  }
+
+  function restoreSavedAdminOverlay(){
+    const saved = loadAdminOverlay();
+    if (!saved) return;
+
+    // Re-open only the place the user was on. Unsaved file selections
+    // cannot be restored by browsers after a hard refresh.
+    switch(saved.type){
+      case 'screen-playlist':
+        if (saved.id && screenById(saved.id)) renderScreenPlaylist(saved.id, true);
+        else clearAdminOverlay();
+        break;
+      case 'screen-manage':
+        if (!saved.id || screenById(saved.id)) openScreenDialog(saved.id || null, true);
+        else clearAdminOverlay();
+        break;
+      case 'screen-delete':
+        if (saved.id && screenById(saved.id)) openDeleteScreenDialog(saved.id, true);
+        else clearAdminOverlay();
+        break;
+      case 'internal-ad':
+        if (!saved.id || loadInternalAds().some(ad => ad.id === saved.id)) openInternalAdDialog(saved.id || null, true);
+        else clearAdminOverlay();
+        break;
+      case 'screen-assignment':
+        if (saved.id && loadRequests().some(r => r.id === saved.id)) openScreenAssignmentDialog(saved.id, true);
+        else clearAdminOverlay();
+        break;
+      case 'creative-upload':
+        if (saved.id && loadRequests().some(r => r.id === saved.id)) openCreativeUploadDialog(saved.id, true);
+        else clearAdminOverlay();
+        break;
+      case 'change-request':
+        if (saved.id && loadRequests().some(r => r.id === saved.id)) openChangeRequestDialog(saved.id, true);
+        else clearAdminOverlay();
+        break;
+      default:
+        clearAdminOverlay();
     }
   }
 
@@ -669,7 +747,9 @@
     const search = document.getElementById('requestSearch');
 
     if (filter) filter.value = next.statusFilter || 'all';
-    if (search && next.view === 'requests') search.value = '';
+    if (search && next.view === 'requests') {
+      search.value = sessionStorage.getItem(ADMIN_SEARCH_KEY) || '';
+    }
 
     setView(next.view);
 
@@ -722,6 +802,10 @@
     }
 
     applyAdminState(currentAdminState);
+
+    // Restore the exact open Admin layer (playlist/editor/dialog) after
+    // the underlying view/request has been rebuilt.
+    setTimeout(() => restoreSavedAdminOverlay(), 0);
 
     // Browser Back trap:
     // two same-document entries let us receive popstate before the browser
@@ -1016,13 +1100,15 @@
     dialog.querySelector('#screenManagePhoto').value = '';
     clearScreenEditorPreviewUrl();
     unlockAdminPageScroll();
+    clearAdminOverlay('screen-manage');
     restoreScreenReturnPosition();
     updateAdminBackButton();
   }
 
-  function openScreenDialog(id=null){
+  function openScreenDialog(id=null, restoring=false){
     ensureScreensView();
-    rememberScreenReturnPosition();
+    if (!restoring) rememberScreenReturnPosition();
+    saveAdminOverlay('screen-manage', id || null);
 
     const existing = id ? screenById(id) : null;
 
@@ -1280,13 +1366,15 @@
     dialog.classList.remove('show');
     dialog.dataset.screenId = '';
     unlockAdminPageScroll();
+    clearAdminOverlay('screen-delete');
     restoreScreenReturnPosition();
     updateAdminBackButton();
   }
 
-  function openDeleteScreenDialog(id){
+  function openDeleteScreenDialog(id, restoring=false){
     ensureScreensView();
-    rememberScreenReturnPosition();
+    if (!restoring) rememberScreenReturnPosition();
+    saveAdminOverlay('screen-delete', id);
 
     const screen = screenById(id);
     if (!screen) return;
@@ -1407,7 +1495,9 @@
       </div>`;
   }
 
-  function openInternalAdDialog(id=null){
+  function openInternalAdDialog(id=null, restoring=false){
+    ensureScreensView();
+    saveAdminOverlay('internal-ad', id || null);
     const existing = id ? loadInternalAds().find(ad => ad.id === id) : null;
     let dialog = document.getElementById('internalAdDialog');
 
@@ -1444,6 +1534,7 @@
         dialog.dataset.adId='';
         dialog.querySelector('#internalAdFile').value='';
         unlockAdminPageScroll();
+        clearAdminOverlay('internal-ad');
       };
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
       dialog.querySelector('[data-internal-cancel]').addEventListener('click', close);
@@ -1654,6 +1745,7 @@
     playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
     playlistPreviewUrls = [];
     unlockAdminPageScroll();
+    clearAdminOverlay('screen-playlist');
     restoreScreenReturnPosition();
     updateAdminBackButton();
   }
@@ -1733,9 +1825,10 @@
     }
   }
 
-  function renderScreenPlaylist(screenId){
+  function renderScreenPlaylist(screenId, restoring=false){
     ensureScreensView();
-    rememberScreenReturnPosition();
+    if (!restoring) rememberScreenReturnPosition();
+    saveAdminOverlay('screen-playlist', screenId);
 
     const screen = screenById(screenId);
     if (!screen) return;
@@ -2171,7 +2264,8 @@
     openRequest(id, false);
   }
 
-  function openScreenAssignmentDialog(id){
+  function openScreenAssignmentDialog(id, restoring=false){
+    saveAdminOverlay('screen-assignment', id);
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
 
@@ -2202,6 +2296,7 @@
       const close = () => {
         dialog.classList.remove('show');
         dialog.dataset.requestId = '';
+        clearAdminOverlay('screen-assignment');
       };
 
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
@@ -2304,7 +2399,8 @@
     dialog.classList.add('show');
   }
 
-  function openCreativeUploadDialog(id){
+  function openCreativeUploadDialog(id, restoring=false){
+    saveAdminOverlay('creative-upload', id);
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
 
@@ -2346,6 +2442,7 @@
 
       const close = () => {
         dialog.classList.remove('show');
+        clearAdminOverlay('creative-upload');
         dialog.dataset.requestId = '';
         dialog.querySelector('#creativeUploadFile').value = '';
         dialog.querySelector('#selectedCreativeFile').textContent = 'Няма избран файл';
@@ -2430,7 +2527,8 @@
     dialog.classList.add('show');
   }
 
-  function openChangeRequestDialog(id){
+  function openChangeRequestDialog(id, restoring=false){
+    saveAdminOverlay('change-request', id);
     const r = loadRequests().find(x => x.id === id);
     if (!r) return;
 
@@ -2469,6 +2567,7 @@
 
       const close = () => {
         dialog.classList.remove('show');
+        clearAdminOverlay('change-request');
         dialog.dataset.requestId = '';
       };
 
@@ -2639,7 +2738,10 @@
   document.getElementById('addInternalAdBtn')?.addEventListener('click', () => openInternalAdDialog());
   document.getElementById('closeDrawer').addEventListener('click', closeRequest);
   backdrop.addEventListener('click', closeRequest);
-  document.getElementById('requestSearch').addEventListener('input', renderRequests);
+  document.getElementById('requestSearch').addEventListener('input', (e) => {
+    sessionStorage.setItem(ADMIN_SEARCH_KEY, e.target.value || '');
+    renderRequests();
+  });
   document.getElementById('statusFilter').addEventListener('change', (e) => {
     navigateAdmin({
       view:'requests',
