@@ -718,15 +718,26 @@
     }
   }
 
-  function saveAdminOverlay(type=null, id=null){
+  function saveAdminOverlay(type=null, id=null, extra={}){
     try{
       if (!type){
         sessionStorage.removeItem(ADMIN_OVERLAY_KEY);
         return;
       }
+
+      const previous = loadAdminOverlay();
+      const sameOverlay = previous?.type === type && (previous?.id ?? null) === (id ?? null);
+      const isScreenOverlay = ['screen-playlist','screen-manage','screen-delete','screen-checklist','broadcast-preview'].includes(type);
+
       sessionStorage.setItem(ADMIN_OVERLAY_KEY, JSON.stringify({
         type,
-        id:id ?? null
+        id:id ?? null,
+        returnScrollY:Number.isFinite(Number(extra.returnScrollY))
+          ? Number(extra.returnScrollY)
+          : (isScreenOverlay ? screenReturnScrollY : (sameOverlay ? previous?.returnScrollY ?? null : null)),
+        dialogScrollTop:Number.isFinite(Number(extra.dialogScrollTop))
+          ? Number(extra.dialogScrollTop)
+          : (sameOverlay ? Number(previous?.dialogScrollTop || 0) : 0)
       }));
     }catch(e){}
   }
@@ -735,7 +746,12 @@
     try{
       const raw = JSON.parse(sessionStorage.getItem(ADMIN_OVERLAY_KEY) || 'null');
       if (!raw?.type) return null;
-      return {type:String(raw.type), id:raw.id ?? null};
+      return {
+        type:String(raw.type),
+        id:raw.id ?? null,
+        returnScrollY:Number.isFinite(Number(raw.returnScrollY)) ? Number(raw.returnScrollY) : null,
+        dialogScrollTop:Number.isFinite(Number(raw.dialogScrollTop)) ? Number(raw.dialogScrollTop) : 0
+      };
     }catch(e){
       return null;
     }
@@ -778,8 +794,27 @@
         else clearAdminOverlay();
         break;
       case 'screen-checklist':
-        if (saved.id && screenById(saved.id)) openScreenChecklist(saved.id, true);
-        else clearAdminOverlay();
+        if (saved.id && screenById(saved.id)){
+          if (Number.isFinite(saved.returnScrollY)){
+            screenReturnScrollY = saved.returnScrollY;
+            window.scrollTo(0, saved.returnScrollY);
+          }
+
+          openScreenChecklist(saved.id, true);
+
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const checklistDialog = document.querySelector('#screenChecklistDialog .screen-checklist-dialog');
+              if (checklistDialog){
+                checklistDialog.scrollTop = Math.max(0, saved.dialogScrollTop || 0);
+                saveAdminOverlay('screen-checklist', saved.id, {
+                  returnScrollY:screenReturnScrollY,
+                  dialogScrollTop:checklistDialog.scrollTop
+                });
+              }
+            });
+          });
+        }else clearAdminOverlay();
         break;
       case 'internal-ad':
         if (!saved.id || loadInternalAds().some(ad => ad.id === saved.id)) openInternalAdDialog(saved.id || null, true);
@@ -908,7 +943,7 @@
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.viewPanel === name));
     document.querySelectorAll('.nav-item[data-view]').forEach(v => v.classList.toggle('active', v.dataset.view === name));
     document.getElementById('viewTitle').textContent = titles[name] || 'Admin';
-    document.querySelector('.sidebar').classList.remove('open');
+    closeMobileSidebar();
     if (name === 'requests') renderRequests();
     if (name === 'clients') renderClients();
     if (name === 'screens') { renderInternalAds(); renderScreens(); }
@@ -1018,8 +1053,65 @@
     });
   });
 
+  function closeMobileSidebar(){
+    const sidebar = document.querySelector('.sidebar');
+    const scrim = document.getElementById('sidebarScrim');
+    const menuButton = document.getElementById('mobileMenu');
+    if (!sidebar) return;
+
+    sidebar.classList.remove('open');
+    if (scrim) scrim.hidden = true;
+    if (menuButton) menuButton.setAttribute('aria-expanded','false');
+  }
+
+  function openMobileSidebar(){
+    const sidebar = document.querySelector('.sidebar');
+    const scrim = document.getElementById('sidebarScrim');
+    const menuButton = document.getElementById('mobileMenu');
+    if (!sidebar) return;
+
+    sidebar.classList.add('open');
+    if (scrim) scrim.hidden = false;
+    if (menuButton) menuButton.setAttribute('aria-expanded','true');
+  }
+
+  function toggleMobileSidebar(){
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    if (sidebar.classList.contains('open')) closeMobileSidebar();
+    else openMobileSidebar();
+  }
+
   document.getElementById('adminBack').addEventListener('click', goAdminBack);
-  document.getElementById('mobileMenu').addEventListener('click', () => document.querySelector('.sidebar').classList.toggle('open'));
+
+  const mobileMenuButton = document.getElementById('mobileMenu');
+  mobileMenuButton.setAttribute('aria-expanded','false');
+  mobileMenuButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMobileSidebar();
+  });
+
+  document.getElementById('sidebarScrim')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMobileSidebar();
+  });
+
+  document.addEventListener('pointerdown', (e) => {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar?.classList.contains('open')) return;
+    if (sidebar.contains(e.target) || mobileMenuButton.contains(e.target)) return;
+    closeMobileSidebar();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMobileSidebar();
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) closeMobileSidebar();
+  });
 
   window.addEventListener('popstate', () => {
     if (sessionStorage.getItem(SESSION_KEY) !== '1' || !browserBackArmed) return;
@@ -1589,8 +1681,10 @@
     if (!dialog || !dialog.classList.contains('show')) return;
     dialog.classList.remove('show');
     dialog.dataset.screenId = '';
+    const returnY = screenReturnScrollY;
     unlockAdminPageScroll();
     clearAdminOverlay('screen-checklist');
+    screenReturnScrollY = returnY;
     restoreScreenReturnPosition();
     updateAdminBackButton();
   }
@@ -1684,6 +1778,16 @@
         if (e.target === dialog) closeScreenChecklist();
       });
 
+      dialog.querySelector('.screen-checklist-dialog').addEventListener('scroll', (e) => {
+        if (!dialog.classList.contains('show')) return;
+        const id = dialog.dataset.screenId;
+        if (!id) return;
+        saveAdminOverlay('screen-checklist', id, {
+          returnScrollY:screenReturnScrollY,
+          dialogScrollTop:e.currentTarget.scrollTop
+        });
+      }, {passive:true});
+
       dialog.querySelector('#screenChecklistSave').addEventListener('click', () => {
         const id = dialog.dataset.screenId;
         const screens = loadScreenCatalog();
@@ -1704,7 +1808,14 @@
     }
 
     dialog.dataset.screenId = screenId;
-    saveAdminOverlay('screen-checklist', screenId);
+    const checklistScroller = dialog.querySelector('.screen-checklist-dialog');
+    if (!restoring && checklistScroller) checklistScroller.scrollTop = 0;
+
+    saveAdminOverlay('screen-checklist', screenId, {
+      returnScrollY:screenReturnScrollY,
+      dialogScrollTop:restoring ? checklistScroller?.scrollTop || 0 : 0
+    });
+
     renderScreenChecklistDialog(screenId);
     lockAdminPageScroll();
     dialog.classList.add('show');
