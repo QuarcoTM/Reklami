@@ -1400,3 +1400,315 @@ body.admin-modal-open{
   object-fit:contain !important;
   object-position:center !important;
 }
+
+
+/* v2.8 — Fullscreen playlist preview */
+.playlist-broadcast-actions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin:14px 0 20px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+}
+.playlist-broadcast-actions .btn{
+  flex:none;
+}
+.playlist-broadcast-actions>span{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+}
+
+.broadcast-preview-backdrop{
+  position:fixed;
+  inset:0;
+  display:none;
+  z-index:320;
+  background:#080808;
+  color:#fff;
+}
+.broadcast-preview-backdrop.show{
+  display:block;
+}
+
+.broadcast-preview-shell{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100dvh;
+  min-height:100vh;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  background:#080808;
+  color:#fff;
+  overflow:hidden;
+}
+
+.broadcast-preview-topbar{
+  min-height:72px;
+  padding:12px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  border-bottom:1px solid rgba(255,255,255,.12);
+  background:rgba(9,9,9,.96);
+  z-index:3;
+}
+.broadcast-preview-heading{
+  min-width:0;
+  display:grid;
+  gap:2px;
+}
+.broadcast-preview-heading .section-kicker{
+  color:#d8b14c;
+}
+.broadcast-preview-heading strong{
+  font-size:18px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.broadcast-preview-heading small{
+  color:rgba(255,255,255,.62);
+}
+.broadcast-preview-top-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.broadcast-icon-btn,
+.broadcast-close-btn,
+.broadcast-control-btn,
+.broadcast-nav-btn{
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  cursor:pointer;
+  font:inherit;
+  font-weight:850;
+}
+.broadcast-icon-btn{
+  height:42px;
+  padding:0 13px;
+  border-radius:11px;
+}
+.broadcast-close-btn{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  font-size:27px;
+  line-height:1;
+}
+.broadcast-preview-main{
+  position:relative;
+  min-height:0;
+  display:grid;
+  grid-template-columns:56px minmax(0,1fr) 56px;
+  align-items:center;
+  gap:12px;
+  padding:16px;
+  overflow:hidden;
+}
+.broadcast-screen-wrap{
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:grid;
+  place-items:center;
+}
+.broadcast-screen-stage{
+  position:relative;
+  height:100%;
+  max-height:100%;
+  aspect-ratio:9/16;
+  max-width:100%;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:#000;
+  box-shadow:0 0 0 1px rgba(255,255,255,.16),0 18px 60px rgba(0,0,0,.5);
+}
+.broadcast-screen-stage img,
+.broadcast-screen-stage video{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:contain;
+  object-position:center;
+  background:#000;
+}
+.broadcast-loading,
+.broadcast-empty{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:8px;
+  text-align:center;
+  padding:24px;
+  color:rgba(255,255,255,.72);
+  background:#000;
+}
+.broadcast-empty strong{
+  color:#fff;
+}
+.broadcast-empty-mark{
+  display:grid;
+  place-items:center;
+  width:58px;
+  height:58px;
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:15px;
+  color:#d8b14c;
+  font-weight:950;
+  font-size:20px;
+}
+.broadcast-nav-btn{
+  width:48px;
+  height:64px;
+  border-radius:15px;
+  font-size:38px;
+  line-height:1;
+}
+.broadcast-preview-controls{
+  min-height:84px;
+  padding:12px 18px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(160px,360px) auto;
+  align-items:center;
+  gap:16px;
+  border-top:1px solid rgba(255,255,255,.12);
+  background:rgba(9,9,9,.97);
+  z-index:3;
+}
+.broadcast-current-copy{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+.broadcast-current-copy strong,
+.broadcast-current-copy span{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.broadcast-current-copy span{
+  color:rgba(255,255,255,.6);
+  font-size:13px;
+}
+.broadcast-progress-track{
+  width:100%;
+  height:6px;
+  overflow:hidden;
+  border-radius:999px;
+  background:rgba(255,255,255,.14);
+}
+.broadcast-progress-track>span{
+  display:block;
+  width:0;
+  height:100%;
+  border-radius:inherit;
+  background:#d8b14c;
+}
+.broadcast-control-buttons{
+  display:flex;
+  gap:8px;
+}
+.broadcast-control-btn{
+  min-height:42px;
+  padding:0 13px;
+  border-radius:11px;
+}
+
+@media(max-width:700px){
+  .playlist-broadcast-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .playlist-broadcast-actions .btn{
+    width:100%;
+  }
+
+  .broadcast-preview-topbar{
+    min-height:64px;
+    padding:9px 10px;
+  }
+  .broadcast-preview-heading strong{
+    font-size:16px;
+  }
+  .broadcast-icon-btn span{
+    display:none;
+  }
+  .broadcast-icon-btn{
+    width:42px;
+    padding:0;
+  }
+
+  .broadcast-preview-main{
+    grid-template-columns:36px minmax(0,1fr) 36px;
+    gap:6px;
+    padding:8px 4px;
+  }
+  .broadcast-nav-btn{
+    width:34px;
+    height:52px;
+    border-radius:11px;
+    font-size:30px;
+  }
+
+  .broadcast-screen-stage{
+    width:auto;
+    height:100%;
+    max-width:100%;
+  }
+
+  .broadcast-preview-controls{
+    min-height:112px;
+    padding:10px;
+    grid-template-columns:1fr auto;
+    gap:9px 10px;
+  }
+  .broadcast-current-copy{
+    grid-column:1 / 2;
+  }
+  .broadcast-progress-track{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+  .broadcast-control-buttons{
+    grid-column:2;
+    grid-row:1;
+  }
+  .broadcast-control-btn{
+    font-size:0;
+    width:42px;
+    padding:0;
+  }
+  #broadcastPlayPauseBtn::first-letter,
+  #broadcastRestartBtn::first-letter{
+    font-size:16px;
+  }
+}
+
+@media(max-height:620px) and (orientation:landscape){
+  .broadcast-preview-topbar{
+    min-height:52px;
+    padding:6px 10px;
+  }
+  .broadcast-preview-heading .section-kicker,
+  .broadcast-preview-heading small{
+    display:none;
+  }
+  .broadcast-preview-main{
+    padding:6px;
+  }
+  .broadcast-preview-controls{
+    min-height:58px;
+    padding:7px 10px;
+  }
+}

@@ -607,6 +607,12 @@
     // Re-open only the place the user was on. Unsaved file selections
     // cannot be restored by browsers after a hard refresh.
     switch(saved.type){
+      case 'broadcast-preview':
+        if (saved.id && screenById(saved.id)){
+          renderScreenPlaylist(saved.id, true);
+          setTimeout(() => openBroadcastPreview(saved.id, true), 0);
+        }else clearAdminOverlay();
+        break;
       case 'screen-playlist':
         if (saved.id && screenById(saved.id)) renderScreenPlaylist(saved.id, true);
         else clearAdminOverlay();
@@ -677,6 +683,7 @@
 
   function screenOverlayIsOpen(){
     return Boolean(
+      document.getElementById('broadcastPreviewDialog')?.classList.contains('show') ||
       document.getElementById('screenPlaylistDialog')?.classList.contains('show') ||
       document.getElementById('screenManageDialog')?.classList.contains('show') ||
       document.getElementById('deleteScreenDialog')?.classList.contains('show')
@@ -684,6 +691,12 @@
   }
 
   function closeTopAdminOverlayForBack(){
+    const broadcast = document.getElementById('broadcastPreviewDialog');
+    if (broadcast?.classList.contains('show')){
+      closeBroadcastPreview();
+      return true;
+    }
+
     const playlist = document.getElementById('screenPlaylistDialog');
     if (playlist?.classList.contains('show')){
       closeScreenPlaylist();
@@ -1770,6 +1783,14 @@
         </div>
 
         <div id="playlistSummary" class="playlist-summary"></div>
+
+        <div class="playlist-broadcast-actions">
+          <button type="button" class="btn btn-primary" id="broadcastPreviewBtn">
+            ▶ Преглед на излъчването
+          </button>
+          <span id="broadcastPreviewHint">Виж playlist-а така, както би се въртял на екрана.</span>
+        </div>
+
         <div id="playlistItems" class="playlist-items"></div>
 
         <div class="playlist-dialog-foot">
@@ -1779,6 +1800,10 @@
       </section>`;
 
     document.body.appendChild(dialog);
+
+    dialog.querySelector('#broadcastPreviewBtn').addEventListener('click', () => {
+      if (activePlaylistScreenId) openBroadcastPreview(activePlaylistScreenId);
+    });
 
     dialog.querySelector('.playlist-dialog-close').addEventListener('click', closeScreenPlaylist);
     dialog.querySelectorAll('[data-playlist-close]').forEach(button => {
@@ -1862,6 +1887,15 @@
       <div><span>Общ цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
     `;
 
+    const previewable = configuredPlaying.length;
+    const previewCycle = configuredPlaying.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
+    const previewBtn = dialog.querySelector('#broadcastPreviewBtn');
+    const previewHint = dialog.querySelector('#broadcastPreviewHint');
+    previewBtn.disabled = previewable === 0;
+    previewHint.textContent = previewable
+      ? `${previewable} ${previewable === 1 ? 'реклама' : 'реклами'} · цикъл ${previewCycle} сек. · паузираните не участват`
+      : 'Няма непаузирани реклами за преглед.';
+
     const itemsBox = dialog.querySelector('#playlistItems');
 
     if (!items.length){
@@ -1927,6 +1961,282 @@
     dialog.classList.add('show');
     updateAdminBackButton();
     renderPlaylistPreviews(screenId);
+  }
+
+  let broadcastPreviewTimer = null;
+  let broadcastPreviewUrls = [];
+  let broadcastPreviewItems = [];
+  let broadcastPreviewIndex = 0;
+  let broadcastPreviewPaused = false;
+  let broadcastPreviewScreenId = null;
+  let broadcastPreviewStartedAt = 0;
+  let broadcastPreviewRemainingMs = 0;
+
+  function clearBroadcastPreviewTimer(){
+    if (broadcastPreviewTimer){
+      clearTimeout(broadcastPreviewTimer);
+      broadcastPreviewTimer = null;
+    }
+  }
+
+  function clearBroadcastPreviewUrls(){
+    broadcastPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    broadcastPreviewUrls = [];
+  }
+
+  function broadcastItemTitle(item){
+    return isInternalAd(item)
+      ? (item.title || 'Собствена реклама')
+      : (item.company || item.name || item.id || 'Кампания');
+  }
+
+  function ensureBroadcastPreviewDialog(){
+    let dialog = document.getElementById('broadcastPreviewDialog');
+    if (dialog) return dialog;
+
+    dialog = document.createElement('div');
+    dialog.id = 'broadcastPreviewDialog';
+    dialog.className = 'broadcast-preview-backdrop';
+    dialog.innerHTML = `
+      <section class="broadcast-preview-shell" role="dialog" aria-modal="true" aria-label="Преглед на излъчването">
+        <div class="broadcast-preview-topbar">
+          <div class="broadcast-preview-heading">
+            <span class="section-kicker">ПРЕГЛЕД НА ИЗЛЪЧВАНЕТО</span>
+            <strong id="broadcastScreenName">Екран</strong>
+            <small id="broadcastCycleInfo"></small>
+          </div>
+
+          <div class="broadcast-preview-top-actions">
+            <button type="button" class="broadcast-icon-btn" id="broadcastFullscreenBtn">⛶ <span>Цял екран</span></button>
+            <button type="button" class="broadcast-close-btn" id="broadcastCloseBtn" aria-label="Затвори">×</button>
+          </div>
+        </div>
+
+        <div class="broadcast-preview-main">
+          <button type="button" class="broadcast-nav-btn prev" id="broadcastPrevBtn" aria-label="Предишна реклама">‹</button>
+
+          <div class="broadcast-screen-wrap">
+            <div class="broadcast-screen-stage" id="broadcastStage">
+              <div class="broadcast-loading">Зареждане…</div>
+            </div>
+          </div>
+
+          <button type="button" class="broadcast-nav-btn next" id="broadcastNextBtn" aria-label="Следваща реклама">›</button>
+        </div>
+
+        <div class="broadcast-preview-controls">
+          <div class="broadcast-current-copy">
+            <strong id="broadcastCurrentTitle">—</strong>
+            <span id="broadcastCurrentMeta">—</span>
+          </div>
+
+          <div class="broadcast-progress-track" aria-hidden="true">
+            <span id="broadcastProgressBar"></span>
+          </div>
+
+          <div class="broadcast-control-buttons">
+            <button type="button" class="broadcast-control-btn" id="broadcastPlayPauseBtn">Ⅱ Пауза</button>
+            <button type="button" class="broadcast-control-btn" id="broadcastRestartBtn">↺ Отначало</button>
+          </div>
+        </div>
+      </section>`;
+    document.body.appendChild(dialog);
+
+    dialog.querySelector('#broadcastCloseBtn').addEventListener('click', closeBroadcastPreview);
+    dialog.querySelector('#broadcastPrevBtn').addEventListener('click', () => broadcastPreviewStep(-1));
+    dialog.querySelector('#broadcastNextBtn').addEventListener('click', () => broadcastPreviewStep(1));
+    dialog.querySelector('#broadcastRestartBtn').addEventListener('click', () => {
+      broadcastPreviewIndex = 0;
+      broadcastPreviewPaused = false;
+      renderBroadcastPreviewItem();
+    });
+    dialog.querySelector('#broadcastPlayPauseBtn').addEventListener('click', toggleBroadcastPreviewPause);
+    dialog.querySelector('#broadcastFullscreenBtn').addEventListener('click', async () => {
+      const shell = dialog.querySelector('.broadcast-preview-shell');
+      try{
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else if (shell.requestFullscreen) await shell.requestFullscreen();
+      }catch(e){}
+    });
+
+    return dialog;
+  }
+
+  function updateBroadcastProgress(durationMs){
+    const bar = document.getElementById('broadcastProgressBar');
+    if (!bar) return;
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        bar.style.transition = `width ${Math.max(0, durationMs)}ms linear`;
+        bar.style.width = '100%';
+      });
+    });
+  }
+
+  function freezeBroadcastProgress(){
+    const bar = document.getElementById('broadcastProgressBar');
+    if (!bar) return;
+    const computed = getComputedStyle(bar).width;
+    const parentWidth = bar.parentElement?.getBoundingClientRect().width || 1;
+    const percent = Math.max(0, Math.min(100, (parseFloat(computed) / parentWidth) * 100));
+    bar.style.transition = 'none';
+    bar.style.width = `${percent}%`;
+  }
+
+  async function renderBroadcastPreviewItem(){
+    clearBroadcastPreviewTimer();
+
+    const dialog = ensureBroadcastPreviewDialog();
+    const stage = dialog.querySelector('#broadcastStage');
+
+    if (!broadcastPreviewItems.length){
+      stage.innerHTML = `
+        <div class="broadcast-empty">
+          <strong>Няма реклами за преглед.</strong>
+          <span>Паузираните реклами не участват в preview режима.</span>
+        </div>`;
+      return;
+    }
+
+    if (broadcastPreviewIndex < 0) broadcastPreviewIndex = broadcastPreviewItems.length - 1;
+    if (broadcastPreviewIndex >= broadcastPreviewItems.length) broadcastPreviewIndex = 0;
+
+    const item = broadcastPreviewItems[broadcastPreviewIndex];
+    const setting = getScreenSetting(item, broadcastPreviewScreenId);
+    const durationMs = setting.duration * 1000;
+    broadcastPreviewRemainingMs = durationMs;
+    broadcastPreviewPaused = false;
+
+    dialog.querySelector('#broadcastCurrentTitle').textContent = broadcastItemTitle(item);
+    dialog.querySelector('#broadcastCurrentMeta').textContent =
+      `${broadcastPreviewIndex + 1} / ${broadcastPreviewItems.length} · ${setting.duration} сек.${isInternalAd(item) ? ' · собствена реклама' : ` · ${item.id}`}`;
+    dialog.querySelector('#broadcastPlayPauseBtn').textContent = 'Ⅱ Пауза';
+
+    const creative = campaignCreative(item);
+    stage.innerHTML = '<div class="broadcast-loading">Зареждане…</div>';
+
+    let record = null;
+    if (creative?.key) record = await getStoredFile(creative.key);
+
+    // Item may have changed while IndexedDB was loading.
+    if (!document.getElementById('broadcastPreviewDialog')?.classList.contains('show')) return;
+    if (broadcastPreviewItems[broadcastPreviewIndex]?.id !== item.id) return;
+
+    if (!record?.blob){
+      stage.innerHTML = `
+        <div class="broadcast-empty">
+          <span class="broadcast-empty-mark">KS</span>
+          <strong>${esc(broadcastItemTitle(item))}</strong>
+          <span>Файлът не е наличен в този demo браузър.</span>
+        </div>`;
+    }else{
+      const url = URL.createObjectURL(record.blob);
+      broadcastPreviewUrls.push(url);
+      const type = String(record.type || creative?.type || '');
+
+      if (type.startsWith('video/')){
+        stage.innerHTML = `<video src="${url}" muted playsinline autoplay loop preload="auto"></video>`;
+        const video = stage.querySelector('video');
+        video?.play().catch(() => {});
+      }else{
+        stage.innerHTML = `<img src="${url}" alt="Рекламна визия">`;
+      }
+    }
+
+    broadcastPreviewStartedAt = Date.now();
+    updateBroadcastProgress(durationMs);
+    broadcastPreviewTimer = setTimeout(() => broadcastPreviewStep(1), durationMs);
+  }
+
+  function broadcastPreviewStep(direction){
+    if (!broadcastPreviewItems.length) return;
+    broadcastPreviewIndex += direction;
+    if (broadcastPreviewIndex < 0) broadcastPreviewIndex = broadcastPreviewItems.length - 1;
+    if (broadcastPreviewIndex >= broadcastPreviewItems.length) broadcastPreviewIndex = 0;
+    renderBroadcastPreviewItem();
+  }
+
+  function toggleBroadcastPreviewPause(){
+    if (!broadcastPreviewItems.length) return;
+
+    const dialog = document.getElementById('broadcastPreviewDialog');
+    const btn = dialog?.querySelector('#broadcastPlayPauseBtn');
+    const video = dialog?.querySelector('#broadcastStage video');
+
+    if (!broadcastPreviewPaused){
+      broadcastPreviewPaused = true;
+      const elapsed = Date.now() - broadcastPreviewStartedAt;
+      broadcastPreviewRemainingMs = Math.max(0, broadcastPreviewRemainingMs - elapsed);
+      clearBroadcastPreviewTimer();
+      freezeBroadcastProgress();
+      video?.pause();
+      if (btn) btn.textContent = '▶ Продължи';
+      return;
+    }
+
+    broadcastPreviewPaused = false;
+    broadcastPreviewStartedAt = Date.now();
+    if (btn) btn.textContent = 'Ⅱ Пауза';
+    video?.play().catch(() => {});
+
+    const bar = dialog?.querySelector('#broadcastProgressBar');
+    if (bar){
+      requestAnimationFrame(() => {
+        bar.style.transition = `width ${Math.max(0, broadcastPreviewRemainingMs)}ms linear`;
+        bar.style.width = '100%';
+      });
+    }
+    broadcastPreviewTimer = setTimeout(() => broadcastPreviewStep(1), broadcastPreviewRemainingMs);
+  }
+
+  function closeBroadcastPreview(){
+    const dialog = document.getElementById('broadcastPreviewDialog');
+    if (!dialog || !dialog.classList.contains('show')) return;
+
+    clearBroadcastPreviewTimer();
+    clearBroadcastPreviewUrls();
+    broadcastPreviewItems = [];
+    broadcastPreviewIndex = 0;
+    broadcastPreviewPaused = false;
+    broadcastPreviewScreenId = null;
+
+    dialog.classList.remove('show');
+
+    // Playlist remains open underneath, so keep its exact refresh state.
+    if (activePlaylistScreenId) saveAdminOverlay('screen-playlist', activePlaylistScreenId);
+    else clearAdminOverlay('broadcast-preview');
+
+    updateAdminBackButton();
+  }
+
+  function openBroadcastPreview(screenId, restoring=false){
+    const screen = screenById(screenId);
+    if (!screen) return;
+
+    const items = allPlaylistItems(screenId)
+      .filter(item => !getScreenSetting(item, screenId).paused);
+
+    if (!items.length){
+      toast('Няма непаузирани реклами за преглед.');
+      return;
+    }
+
+    broadcastPreviewScreenId = screenId;
+    broadcastPreviewItems = items;
+    broadcastPreviewIndex = 0;
+    broadcastPreviewPaused = false;
+
+    const dialog = ensureBroadcastPreviewDialog();
+    dialog.querySelector('#broadcastScreenName').textContent = screen.name;
+    dialog.querySelector('#broadcastCycleInfo').textContent =
+      `${items.length} ${items.length === 1 ? 'реклама' : 'реклами'} · общ цикъл ${items.reduce((sum,item) => sum + getScreenSetting(item, screenId).duration, 0)} сек.`;
+
+    saveAdminOverlay('broadcast-preview', screenId);
+    dialog.classList.add('show');
+    updateAdminBackButton();
+    renderBroadcastPreviewItem();
   }
 
   function updateScreenSetting(requestId, screenId, patch){
