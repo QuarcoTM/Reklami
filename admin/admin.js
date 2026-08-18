@@ -1050,7 +1050,6 @@
       initAdminNavigation();
     }, 0);
   }
-  if (sessionStorage.getItem(SESSION_KEY) === '1') enterAdmin();
   document.getElementById('enterDemo').addEventListener('click', enterAdmin);
   document.getElementById('exitDemo').addEventListener('click', () => {
     sessionStorage.removeItem(SESSION_KEY);
@@ -4737,6 +4736,12 @@
     renderScreens();
     renderCreatives();
   }
+
+  // Restore an existing demo session only after the whole admin module has
+  // finished initializing. Calling enterAdmin earlier can execute renderAll()
+  // while navigation/search constants are still in their temporal dead zone,
+  // which stops the script and leaves every admin button unresponsive.
+  if (sessionStorage.getItem(SESSION_KEY) === '1') enterAdmin();
 
   // While the demo Admin is open, keep deadlines current automatically.
   setInterval(() => {
