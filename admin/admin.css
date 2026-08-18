@@ -2395,3 +2395,14 @@ body.admin-modal-open{
 .campaign-countdown.scheduled{background:#edf6ff;border-color:#cfe4f8;color:#245f91}
 .screen-future-capacity{flex-basis:100%;padding-top:4px;border-top:1px dashed rgba(0,0,0,.08)}
 .screen-future-capacity.is-full{color:#a33b2f;font-weight:850}
+
+/* v3.6.2 — request drawer action/dialog stacking fix */
+/* The request drawer sits at z-index 400. Action dialogs opened from inside
+   the drawer must be above it, otherwise on iPhone the tap works but the
+   dialog is rendered behind the full-screen drawer and appears unresponsive. */
+.change-dialog-backdrop{
+  z-index:520!important;
+}
+.toast{
+  z-index:700!important;
+}
