@@ -70,6 +70,11 @@
       workStart:/^\d{2}:\d{2}$/.test(String(screen?.workStart || '')) ? String(screen.workStart) : '',
       workEnd:/^\d{2}:\d{2}$/.test(String(screen?.workEnd || '')) ? String(screen.workEnd) : '',
       wifiAvailable:typeof screen?.wifiAvailable === 'boolean' ? screen.wifiAvailable : null,
+      readiness:{
+        mounted:Boolean(screen?.readiness?.mounted),
+        internetTested:Boolean(screen?.readiness?.internetTested),
+        onsiteTest:Boolean(screen?.readiness?.onsiteTest)
+      },
       status,
       active:status === 'published',
       yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
@@ -185,6 +190,73 @@
       rotationsPerDay,
       hoursPerDay
     };
+  }
+
+  function screenReadiness(screenId){
+    const screen = screenById(screenId);
+    if (!screen) return {done:0,total:6,items:[]};
+
+    const playlistReady = allPlaylistItems(screenId)
+      .some(item => !getScreenSetting(item, screenId).paused);
+
+    const items = [
+      {
+        key:'mounted',
+        label:'Екранът е монтиран',
+        help:'Телевизорът / дисплеят е физически поставен на локацията.',
+        manual:true,
+        done:Boolean(screen.readiness?.mounted)
+      },
+      {
+        key:'internetTested',
+        label:'Интернетът е осигурен и тестван',
+        help:screen.wifiAvailable === false
+          ? 'Локацията е отбелязана без Wi‑Fi — потвърди, че алтернативната интернет връзка е готова.'
+          : 'Потвърди, че връзката на място е реално тествана.',
+        manual:true,
+        done:Boolean(screen.readiness?.internetTested)
+      },
+      {
+        key:'yodeck',
+        label:'Yodeck Player ID е добавен',
+        help:'Отбелязва се автоматично от данните на екрана.',
+        manual:false,
+        done:Boolean(screen.yodeckPlayerId)
+      },
+      {
+        key:'photo',
+        label:'Снимка на локацията е качена',
+        help:'Отбелязва се автоматично, когато има запазена снимка.',
+        manual:false,
+        done:Boolean(screen.photo?.key)
+      },
+      {
+        key:'playlist',
+        label:'Playlist има активна реклама',
+        help:'Отбелязва се автоматично при поне една непаузирана реклама.',
+        manual:false,
+        done:playlistReady
+      },
+      {
+        key:'onsiteTest',
+        label:'Направен е реален тест на място',
+        help:'Провери изображението, яркостта, връзката и реалното въртене на playlist-а.',
+        manual:true,
+        done:Boolean(screen.readiness?.onsiteTest)
+      }
+    ];
+
+    return {
+      done:items.filter(item => item.done).length,
+      total:items.length,
+      items
+    };
+  }
+
+  function readinessClass(readiness){
+    if (readiness.done === readiness.total) return 'is-ready';
+    if (readiness.done >= 4) return 'is-almost-ready';
+    return 'is-preparing';
   }
 
   function screenStatusLabel(screen){
@@ -705,6 +777,10 @@
         if (saved.id && screenById(saved.id)) openDeleteScreenDialog(saved.id, true);
         else clearAdminOverlay();
         break;
+      case 'screen-checklist':
+        if (saved.id && screenById(saved.id)) openScreenChecklist(saved.id, true);
+        else clearAdminOverlay();
+        break;
       case 'internal-ad':
         if (!saved.id || loadInternalAds().some(ad => ad.id === saved.id)) openInternalAdDialog(saved.id || null, true);
         else clearAdminOverlay();
@@ -766,7 +842,8 @@
       document.getElementById('broadcastPreviewDialog')?.classList.contains('show') ||
       document.getElementById('screenPlaylistDialog')?.classList.contains('show') ||
       document.getElementById('screenManageDialog')?.classList.contains('show') ||
-      document.getElementById('deleteScreenDialog')?.classList.contains('show')
+      document.getElementById('deleteScreenDialog')?.classList.contains('show') ||
+      document.getElementById('screenChecklistDialog')?.classList.contains('show')
     );
   }
 
@@ -792,6 +869,12 @@
     const del = document.getElementById('deleteScreenDialog');
     if (del?.classList.contains('show')){
       closeDeleteScreenDialog();
+      return true;
+    }
+
+    const checklist = document.getElementById('screenChecklistDialog');
+    if (checklist?.classList.contains('show')){
+      closeScreenChecklist();
       return true;
     }
 
@@ -1501,6 +1584,133 @@
     requestAnimationFrame(() => dialog.querySelector('#screenManageName')?.focus());
   }
 
+  function closeScreenChecklist(){
+    const dialog = document.getElementById('screenChecklistDialog');
+    if (!dialog || !dialog.classList.contains('show')) return;
+    dialog.classList.remove('show');
+    dialog.dataset.screenId = '';
+    unlockAdminPageScroll();
+    clearAdminOverlay('screen-checklist');
+    restoreScreenReturnPosition();
+    updateAdminBackButton();
+  }
+
+  function renderScreenChecklistDialog(screenId){
+    const dialog = document.getElementById('screenChecklistDialog');
+    const screen = screenById(screenId);
+    if (!dialog || !screen) return;
+
+    const readiness = screenReadiness(screenId);
+    dialog.querySelector('#screenChecklistTitle').textContent = `${screen.name} — Готовност`;
+    dialog.querySelector('#screenChecklistScore').textContent = `${readiness.done}/${readiness.total}`;
+    dialog.querySelector('#screenChecklistProgressBar').style.width = `${(readiness.done/readiness.total)*100}%`;
+
+    const status = dialog.querySelector('#screenChecklistStatus');
+    status.className = `screen-checklist-status ${readinessClass(readiness)}`;
+    status.textContent = readiness.done === readiness.total
+      ? '✓ Готов за публикуване'
+      : readiness.done >= 4
+        ? 'Почти готов'
+        : 'В подготовка';
+
+    dialog.querySelector('#screenChecklistItems').innerHTML = readiness.items.map(item => `
+      <label class="screen-check-item ${item.done ? 'is-done' : ''} ${item.manual ? 'is-manual' : 'is-auto'}">
+        <span class="screen-check-control">
+          ${item.manual
+            ? `<input type="checkbox" data-readiness-key="${esc(item.key)}" ${item.done ? 'checked' : ''}>`
+            : `<span class="screen-auto-check">${item.done ? '✓' : '—'}</span>`}
+        </span>
+        <span class="screen-check-copy">
+          <strong>${esc(item.label)}</strong>
+          <small>${esc(item.help)}</small>
+        </span>
+        <span class="screen-check-type">${item.manual ? 'Ръчно' : 'Автоматично'}</span>
+      </label>
+    `).join('');
+
+    dialog.querySelector('#screenChecklistSave').disabled = false;
+  }
+
+  function openScreenChecklist(screenId, restoring=false){
+    ensureScreensView();
+    if (!restoring) rememberScreenReturnPosition();
+
+    const screen = screenById(screenId);
+    if (!screen) return;
+
+    let dialog = document.getElementById('screenChecklistDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'screenChecklistDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog screen-checklist-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ЕКРАН / CHECKLIST</span>
+              <h3 id="screenChecklistTitle">Готовност</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+
+          <div class="screen-checklist-overview">
+            <div>
+              <span>Готовност</span>
+              <strong id="screenChecklistScore">0/6</strong>
+            </div>
+            <span class="screen-checklist-status is-preparing" id="screenChecklistStatus">В подготовка</span>
+          </div>
+
+          <div class="screen-checklist-progress"><span id="screenChecklistProgressBar"></span></div>
+
+          <p class="change-dialog-help">Ръчните проверки отбелязваш ти. Снимката, Yodeck ID и playlist-ът се следят автоматично.</p>
+
+          <div id="screenChecklistItems" class="screen-checklist-items"></div>
+
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-screen-checklist-cancel>← Назад към екраните</button>
+            <button type="button" class="btn btn-primary" id="screenChecklistSave">Запази готовността</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', closeScreenChecklist);
+      dialog.querySelector('[data-screen-checklist-cancel]').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeScreenChecklist();
+      });
+      dialog.addEventListener('click', e => {
+        if (e.target === dialog) closeScreenChecklist();
+      });
+
+      dialog.querySelector('#screenChecklistSave').addEventListener('click', () => {
+        const id = dialog.dataset.screenId;
+        const screens = loadScreenCatalog();
+        const target = screens.find(s => s.id === id);
+        if (!target) return;
+
+        target.readiness = {
+          mounted:Boolean(dialog.querySelector('[data-readiness-key="mounted"]')?.checked),
+          internetTested:Boolean(dialog.querySelector('[data-readiness-key="internetTested"]')?.checked),
+          onsiteTest:Boolean(dialog.querySelector('[data-readiness-key="onsiteTest"]')?.checked)
+        };
+        target.updatedAt = new Date().toISOString();
+        saveScreenCatalog(screens);
+        renderScreens();
+        renderScreenChecklistDialog(id);
+        toast('Готовността на екрана е запазена.');
+      });
+    }
+
+    dialog.dataset.screenId = screenId;
+    saveAdminOverlay('screen-checklist', screenId);
+    renderScreenChecklistDialog(screenId);
+    lockAdminPageScroll();
+    dialog.classList.add('show');
+    updateAdminBackButton();
+  }
+
   function setScreenStatus(id, status){
     if (!['hidden','published','stopped'].includes(status)) return;
 
@@ -1848,6 +2058,7 @@
       const paused = active.length - configuredPlaying.length;
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
       const rotationStats = screenRotationStats(screen.id);
+      const readiness = screenReadiness(screen.id);
 
       const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
       const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
@@ -1892,6 +2103,17 @@
                 ? `<small>Работно време ${esc(workingTimeLabel(screen))} · ${rotationStats.hoursPerDay} ч. дневно.</small>`
                 : `<small>За дневна прогноза въведи работното време от „Редактирай“.</small>`}
             </div>
+
+            <button class="screen-readiness-card ${readinessClass(readiness)}" data-screen-checklist="${esc(screen.id)}">
+              <span class="screen-readiness-top">
+                <span>
+                  <small>Готовност</small>
+                  <strong>${readiness.done}/${readiness.total}</strong>
+                </span>
+                <b>${readiness.done === readiness.total ? '✓ Готов' : 'Отвори checklist →'}</b>
+              </span>
+              <span class="screen-readiness-progress"><i style="width:${(readiness.done/readiness.total)*100}%"></i></span>
+            </button>
 
             <div class="screen-campaign-list">
               ${active.length ? active.slice(0,3).map(r => {
@@ -3368,6 +3590,9 @@
 
     const del = document.getElementById('deleteScreenDialog');
     if (del?.classList.contains('show')) closeDeleteScreenDialog();
+
+    const checklist = document.getElementById('screenChecklistDialog');
+    if (checklist?.classList.contains('show')) closeScreenChecklist();
   }
 
   // Delegated events
@@ -3389,6 +3614,9 @@
 
     const editScreen = e.target.closest('[data-edit-screen]');
     if (editScreen) openScreenDialog(editScreen.dataset.editScreen);
+
+    const checklistScreen = e.target.closest('[data-screen-checklist]');
+    if (checklistScreen) openScreenChecklist(checklistScreen.dataset.screenChecklist);
 
     const statusScreenBtn = e.target.closest('[data-set-screen-status]');
     if (statusScreenBtn) setScreenStatus(statusScreenBtn.dataset.screenId, statusScreenBtn.dataset.setScreenStatus);

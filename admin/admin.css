@@ -1891,3 +1891,220 @@ body.admin-modal-open{
 .screen-location-facts .wifi-no{background:#fff1f1;color:#9a3c3c}
 .drawer-backdrop{z-index:390!important}
 .request-drawer{z-index:400!important}
+
+
+/* v3.2 — screen readiness checklist */
+.screen-readiness-card{
+  width:100%;
+  margin:2px 0 13px;
+  padding:11px 12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#f7f7f4;
+  color:#111;
+  text-align:left;
+  cursor:pointer;
+  font:inherit;
+}
+.screen-readiness-card.is-almost-ready{
+  background:#fff9e9;
+  border-color:#e8d59b;
+}
+.screen-readiness-card.is-ready{
+  background:#eef8f1;
+  border-color:#b9dec4;
+}
+.screen-readiness-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.screen-readiness-top>span{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+}
+.screen-readiness-top small{
+  color:var(--muted);
+  font-size:11px;
+}
+.screen-readiness-top strong{
+  font-size:18px;
+}
+.screen-readiness-top>b{
+  color:var(--blue);
+  font-size:11px;
+}
+.screen-readiness-card.is-ready .screen-readiness-top>b{
+  color:#287141;
+}
+.screen-readiness-progress{
+  display:block;
+  width:100%;
+  height:6px;
+  margin-top:8px;
+  overflow:hidden;
+  border-radius:999px;
+  background:rgba(0,0,0,.08);
+}
+.screen-readiness-progress>i{
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  background:var(--blue);
+}
+.screen-readiness-card.is-almost-ready .screen-readiness-progress>i{
+  background:#c49a27;
+}
+.screen-readiness-card.is-ready .screen-readiness-progress>i{
+  background:#3d9859;
+}
+
+.screen-checklist-dialog{
+  width:min(690px,100%);
+}
+.screen-checklist-overview{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin:12px 0 8px;
+  padding:13px 14px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:#faf9f6;
+}
+.screen-checklist-overview>div{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+}
+.screen-checklist-overview span{
+  color:var(--muted);
+  font-size:12px;
+}
+.screen-checklist-overview strong{
+  font-size:22px;
+}
+.screen-checklist-status{
+  display:inline-flex;
+  min-height:29px;
+  align-items:center;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+}
+.screen-checklist-status.is-preparing{
+  background:#f0efeb;
+  color:#676158;
+}
+.screen-checklist-status.is-almost-ready{
+  background:#fff3ca;
+  color:#8c6814;
+}
+.screen-checklist-status.is-ready{
+  background:#eaf7ee;
+  color:#27713f;
+}
+
+.screen-checklist-progress{
+  width:100%;
+  height:8px;
+  margin-bottom:14px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#ebe9e4;
+}
+.screen-checklist-progress>span{
+  display:block;
+  width:0;
+  height:100%;
+  border-radius:inherit;
+  background:var(--blue);
+  transition:width .2s ease;
+}
+
+.screen-checklist-items{
+  display:grid;
+  gap:8px;
+  margin:14px 0 4px;
+}
+.screen-check-item{
+  display:grid;
+  grid-template-columns:38px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+}
+.screen-check-item.is-done{
+  background:#f5faf6;
+  border-color:#cbe3d1;
+}
+.screen-check-control{
+  display:grid;
+  place-items:center;
+}
+.screen-check-control input{
+  width:22px;
+  height:22px;
+  accent-color:var(--blue);
+}
+.screen-auto-check{
+  display:grid;
+  place-items:center;
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  background:#efefec;
+  color:#7c776f;
+  font-weight:950;
+}
+.screen-check-item.is-done .screen-auto-check{
+  background:#dff1e5;
+  color:#27713f;
+}
+.screen-check-copy{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+.screen-check-copy strong{
+  font-size:13px;
+}
+.screen-check-copy small{
+  color:var(--muted);
+  line-height:1.4;
+}
+.screen-check-type{
+  display:inline-flex;
+  min-height:26px;
+  align-items:center;
+  padding:0 8px;
+  border-radius:999px;
+  background:#f0efeb;
+  color:#716b62;
+  font-size:9px;
+  font-weight:900;
+}
+.screen-check-item.is-manual .screen-check-type{
+  background:#eef4ff;
+  color:#315c9c;
+}
+
+@media(max-width:600px){
+  .screen-checklist-overview{
+    align-items:flex-start;
+  }
+  .screen-check-item{
+    grid-template-columns:34px minmax(0,1fr);
+  }
+  .screen-check-type{
+    grid-column:2;
+    justify-self:start;
+  }
+}
