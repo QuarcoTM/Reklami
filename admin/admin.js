@@ -1,6 +1,7 @@
 
 (() => {
   const STORAGE_KEY = 'ks_demo_requests_v1';
+  const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
   const SESSION_KEY = 'ks_admin_demo_session';
   const DB_NAME = 'KyustendilScreenDemo';
   const DB_VERSION = 1;
@@ -65,7 +66,7 @@
     return {
       duration: [8,9,10].includes(Number(saved.duration)) ? Number(saved.duration) : 10,
       paused: Boolean(saved.paused),
-      order: Number.isFinite(Number(saved.order)) ? Number(saved.order) : null
+      order: (saved.order === null || saved.order === undefined || saved.order === '') ? null : (Number.isFinite(Number(saved.order)) ? Number(saved.order) : null)
     };
   }
 
@@ -128,16 +129,87 @@
   }
 
   function playlistCycleSeconds(screenId){
-    return screenPlaylistRequests(screenId)
+    return allPlaylistItems(screenId)
       .filter(r => !getScreenSetting(r, screenId).paused)
       .reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
   }
 
   function campaignCreative(r){
-    if (r.finalCreative?.key) return r.finalCreative;
-    const files = r.files || [];
+    if (r?.internalAd && r.file?.key) return r.file;
+    if (r?.finalCreative?.key) return r.finalCreative;
+    const files = r?.files || [];
     const media = files.find(f => f.key && ['image/jpeg','image/png','video/mp4'].includes(String(f.type || '')));
     return media || null;
+  }
+
+  function loadInternalAds(){
+    try {
+      const value = JSON.parse(localStorage.getItem(INTERNAL_ADS_KEY) || '[]');
+      return Array.isArray(value) ? value : [];
+    } catch { return []; }
+  }
+
+  function saveInternalAds(ads){
+    localStorage.setItem(INTERNAL_ADS_KEY, JSON.stringify(ads));
+  }
+
+  function isInternalAd(item){
+    return Boolean(item?.internalAd);
+  }
+
+  function makeInternalAdId(){
+    return `KS-HOUSE-${Date.now()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
+  }
+
+  function savePlaylistItem(item){
+    if (isInternalAd(item)){
+      const ads = loadInternalAds();
+      const index = ads.findIndex(x => x.id === item.id);
+      if (index >= 0) ads[index] = item;
+      saveInternalAds(ads);
+      return;
+    }
+    const requests = loadRequests();
+    const index = requests.findIndex(x => x.id === item.id);
+    if (index >= 0) requests[index] = item;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+  }
+
+  function findPlaylistItem(id){
+    return loadRequests().find(x => x.id === id) || loadInternalAds().find(x => x.id === id) || null;
+  }
+
+  function allPlaylistItems(screenId){
+    const requests = screenPlaylistRequests(screenId);
+    const ads = loadInternalAds().filter(ad => ad.active !== false && (ad.assignedScreens || []).includes(screenId));
+    const combined = [...requests, ...ads];
+
+    const used = combined.map(x => getScreenSetting(x,screenId).order).filter(v => v !== null);
+    let next = used.length ? Math.max(...used) + 1 : 1;
+
+    combined
+      .sort((a,b) => new Date(a.activeAt || a.createdAt || 0) - new Date(b.activeAt || b.createdAt || 0))
+      .forEach(item => {
+        if (!item.screenSettings) item.screenSettings = {};
+        const current = item.screenSettings[screenId];
+        if (!current){
+          item.screenSettings[screenId] = {duration:Number(item.duration)||10, paused:false, order:next++};
+          savePlaylistItem(item);
+        } else {
+          let changed = false;
+          if (![8,9,10].includes(Number(current.duration))){ current.duration = Number(item.duration)||10; changed = true; }
+          if (typeof current.paused !== 'boolean'){ current.paused = false; changed = true; }
+          if (!Number.isFinite(Number(current.order))){ current.order = next++; changed = true; }
+          if (changed) savePlaylistItem(item);
+        }
+      });
+
+    return combined.sort((a,b) => {
+      const ao = getScreenSetting(a,screenId).order ?? 999999;
+      const bo = getScreenSetting(b,screenId).order ?? 999999;
+      if (ao !== bo) return ao - bo;
+      return new Date(a.activeAt || a.createdAt || 0) - new Date(b.activeAt || b.createdAt || 0);
+    });
   }
 
   function esc(v=''){
@@ -372,7 +444,7 @@
     document.querySelector('.sidebar').classList.remove('open');
     if (name === 'requests') renderRequests();
     if (name === 'clients') renderClients();
-    if (name === 'screens') renderScreens();
+    if (name === 'screens') { renderInternalAds(); renderScreens(); }
     if (name === 'creatives') renderCreatives();
   }
 
@@ -639,6 +711,153 @@
       </article>`).join('');
   }
 
+  function renderInternalAds(){
+    const box = document.getElementById('internalAdsPanel');
+    if (!box) return;
+    const ads = loadInternalAds().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
+
+    if (!ads.length){
+      box.innerHTML = `<div class="internal-ads-empty"><strong>Собствени реклами</strong><span>Добави „Рекламирай тук“, служебна визия или друга реклама без клиентска заявка.</span></div>`;
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="internal-ads-head"><strong>Собствени реклами</strong><span>${ads.length} общо</span></div>
+      <div class="internal-ad-list">
+        ${ads.map(ad => {
+          const names = (ad.assignedScreens||[]).map(id => screenById(id)?.name).filter(Boolean);
+          return `<article class="internal-ad-row ${ad.active===false?'is-disabled':''}">
+            <div class="internal-ad-icon">KS</div>
+            <div class="internal-ad-copy">
+              <div class="internal-ad-title-line"><strong>${esc(ad.title||'Собствена реклама')}</strong><span class="internal-ad-badge">СОБСТВЕНА</span>${ad.active===false?'<span class="internal-ad-off">СПРЯНА</span>':''}</div>
+              <span>${names.length?esc(names.join(' · ')):'Няма избрани екрани'} · ${Number(ad.duration)||10} сек.</span>
+            </div>
+            <div class="internal-ad-actions">
+              <button class="btn btn-light" data-edit-internal-ad="${esc(ad.id)}">Редактирай</button>
+              <button class="btn ${ad.active===false?'btn-success':'btn-warning'}" data-toggle-internal-ad="${esc(ad.id)}">${ad.active===false?'Включи':'Спри'}</button>
+              <button class="btn btn-danger" data-delete-internal-ad="${esc(ad.id)}">Изтрий</button>
+            </div>
+          </article>`;
+        }).join('')}
+      </div>`;
+  }
+
+  function openInternalAdDialog(id=null){
+    const existing = id ? loadInternalAds().find(ad => ad.id === id) : null;
+    let dialog = document.getElementById('internalAdDialog');
+
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'internalAdDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog internal-ad-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div><span class="section-kicker">СОБСТВЕНА РЕКЛАМА</span><h3 id="internalAdDialogTitle">Добави собствена реклама</h3></div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+          <p class="change-dialog-help">За „Рекламирай тук“, служебни съобщения и други реклами, които не минават през клиентска заявка.</p>
+
+          <div class="internal-ad-form">
+            <label><span>Име на рекламата</span><input id="internalAdTitle" type="text" placeholder="Напр. Рекламирай тук"></label>
+            <div><span class="internal-ad-label">Екрани</span><div id="internalAdScreens" class="screen-assignment-options"></div></div>
+            <label><span>Времетраене</span><select id="internalAdDuration"><option value="8">8 сек.</option><option value="9">9 сек.</option><option value="10">10 сек.</option></select></label>
+            <label class="creative-upload-drop">
+              <input id="internalAdFile" type="file" accept="image/jpeg,image/png,video/mp4">
+              <span class="creative-upload-icon">⇧</span><strong id="internalAdFileLabel">Избери JPG, PNG или MP4</strong><small>Максимум 25 MB</small>
+            </label>
+            <div id="internalAdExistingFile" class="selected-creative-file" hidden></div>
+            <div class="change-dialog-error" id="internalAdError" hidden></div>
+          </div>
+          <div class="change-dialog-actions"><button type="button" class="btn btn-light" data-internal-cancel>Отказ</button><button type="button" class="btn btn-primary" data-internal-save>Запази рекламата</button></div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => { dialog.classList.remove('show'); dialog.dataset.adId=''; dialog.querySelector('#internalAdFile').value=''; };
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-internal-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target===dialog) close(); });
+      dialog.querySelector('#internalAdFile').addEventListener('change', e => {
+        const file=e.target.files?.[0];
+        dialog.querySelector('#internalAdFileLabel').textContent=file?`${file.name} · ${formatBytes(file.size)}`:'Избери JPG, PNG или MP4';
+        dialog.querySelector('#internalAdError').hidden=true;
+      });
+
+      dialog.querySelector('[data-internal-save]').addEventListener('click', async () => {
+        const adId=dialog.dataset.adId||null;
+        const ads=loadInternalAds();
+        const current=adId?ads.find(ad=>ad.id===adId):null;
+        const title=dialog.querySelector('#internalAdTitle').value.trim();
+        const screens=[...dialog.querySelectorAll('input[name="internalAdScreen"]:checked')].map(i=>i.value);
+        const duration=Number(dialog.querySelector('#internalAdDuration').value);
+        const file=dialog.querySelector('#internalAdFile').files?.[0];
+        const error=dialog.querySelector('#internalAdError');
+
+        if(!title){ error.textContent='Напиши име на рекламата.'; error.hidden=false; return; }
+        if(!screens.length){ error.textContent='Избери поне един екран.'; error.hidden=false; return; }
+        if(!current&&!file){ error.textContent='Избери JPG, PNG или MP4.'; error.hidden=false; return; }
+        if(file&&!['image/jpeg','image/png','video/mp4'].includes(file.type)){ error.textContent='Разрешени са само JPG, PNG и MP4.'; error.hidden=false; return; }
+        if(file&&file.size>25*1024*1024){ error.textContent='Файлът е по-голям от 25 MB.'; error.hidden=false; return; }
+
+        let storedFile=current?.file||null;
+        if(file){
+          const key=`internal-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+          try{
+            await putStoredFile({key,blob:file,name:file.name,type:file.type,size:file.size,createdAt:new Date().toISOString()});
+            storedFile={key,name:file.name,type:file.type,size:file.size};
+          }catch(err){ console.error(err); error.textContent='Файлът не можа да бъде записан в demo режима.'; error.hidden=false; return; }
+        }
+
+        if(current){
+          current.title=title; current.assignedScreens=screens; current.duration=duration; current.file=storedFile; current.updatedAt=new Date().toISOString();
+          if(!current.screenSettings) current.screenSettings={};
+          Object.keys(current.screenSettings).forEach(screenId=>{ if(!screens.includes(screenId)) delete current.screenSettings[screenId]; });
+          screens.forEach(screenId=>{
+            const setting=getScreenSetting(current,screenId);
+            current.screenSettings[screenId]={...setting,duration};
+          });
+        }else{
+          const now=new Date().toISOString();
+          const ad={id:makeInternalAdId(),internalAd:true,title,assignedScreens:screens,duration,file:storedFile,active:true,createdAt:now,updatedAt:now,screenSettings:{}};
+          screens.forEach(screenId=>{ ad.screenSettings[screenId]={duration,paused:false,order:null}; });
+          ads.unshift(ad);
+        }
+        saveInternalAds(ads);
+        close(); renderInternalAds(); renderScreens();
+        if(activePlaylistScreenId) renderScreenPlaylist(activePlaylistScreenId);
+        toast(current?'Собствената реклама е обновена.':'Собствената реклама е добавена.');
+      });
+    }
+
+    dialog.dataset.adId=existing?.id||'';
+    dialog.querySelector('#internalAdDialogTitle').textContent=existing?'Редактирай собствена реклама':'Добави собствена реклама';
+    dialog.querySelector('#internalAdTitle').value=existing?.title||'';
+    dialog.querySelector('#internalAdDuration').value=String(existing?.duration||10);
+    dialog.querySelector('#internalAdFile').value='';
+    dialog.querySelector('#internalAdFileLabel').textContent=existing?'Смени файла (по желание)':'Избери JPG, PNG или MP4';
+    dialog.querySelector('#internalAdError').hidden=true;
+    const existingFile=dialog.querySelector('#internalAdExistingFile');
+    existingFile.hidden=!existing?.file;
+    existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
+    const selected=new Set(existing?.assignedScreens||[]);
+    dialog.querySelector('#internalAdScreens').innerHTML=SCREEN_CATALOG.map(screen=>`
+      <label class="screen-option"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}</strong><small>${esc(screen.description)}</small></span></label>`).join('');
+    dialog.classList.add('show');
+  }
+
+  function toggleInternalAd(id){
+    const ads=loadInternalAds(); const ad=ads.find(x=>x.id===id); if(!ad)return;
+    ad.active=ad.active===false; ad.updatedAt=new Date().toISOString(); saveInternalAds(ads);
+    renderInternalAds(); renderScreens(); if(activePlaylistScreenId) renderScreenPlaylist(activePlaylistScreenId);
+    toast(ad.active?'Собствената реклама е включена.':'Собствената реклама е спряна.');
+  }
+
+  function deleteInternalAd(id){
+    const ads=loadInternalAds(); const ad=ads.find(x=>x.id===id); if(!ad)return;
+    if(!confirm(`Изтрий „${ad.title||'Собствена реклама'}“?`))return;
+    saveInternalAds(ads.filter(x=>x.id!==id)); renderInternalAds(); renderScreens(); if(activePlaylistScreenId) renderScreenPlaylist(activePlaylistScreenId); toast('Собствената реклама е изтрита.');
+  }
+
   function renderScreens(){
     const box = document.getElementById('screensGrid');
     if (!box) return;
@@ -648,13 +867,7 @@
     box.innerHTML = SCREEN_CATALOG.map(screen => {
       ensureScreenSettings(requests, screen.id);
 
-      const active = requests
-        .filter(r => r.status === 'active' && (r.assignedScreens || []).includes(screen.id))
-        .sort((a,b) => {
-          const ao = getScreenSetting(a, screen.id).order ?? 999999;
-          const bo = getScreenSetting(b, screen.id).order ?? 999999;
-          return ao - bo;
-        });
+      const active = allPlaylistItems(screen.id);
 
       const playing = active.filter(r => !getScreenSetting(r, screen.id).paused);
       const paused = active.length - playing.length;
@@ -681,12 +894,12 @@
               ${active.length ? active.slice(0,3).map(r => {
                 const setting = getScreenSetting(r, screen.id);
                 return `
-                <button class="screen-campaign-row ${setting.paused ? 'is-paused' : ''}" data-open-request="${esc(r.id)}">
+                <button class="screen-campaign-row ${setting.paused ? 'is-paused' : ''}" ${isInternalAd(r)?`data-edit-internal-ad="${esc(r.id)}"`:`data-open-request="${esc(r.id)}"`}>
                   <span>
-                    <strong>${esc(r.id)} · ${esc(r.company || 'Кампания')}</strong>
-                    <small>${setting.paused ? 'Пауза · ' : ''}${setting.duration} сек. · до ${formatDateOnly(r.expiresAt)}</small>
+                    <strong>${isInternalAd(r)?`KS · ${esc(r.title||'Собствена реклама')}`:`${esc(r.id)} · ${esc(r.company || 'Кампания')}`}</strong>
+                    <small>${setting.paused ? 'Пауза · ' : ''}${setting.duration} сек.${isInternalAd(r)?'':` · до ${formatDateOnly(r.expiresAt)}`}</small>
                   </span>
-                  <b>Отвори →</b>
+                  <b>${isInternalAd(r)?'Редактирай →':'Отвори →'}</b>
                 </button>`;
               }).join('') : '<div class="screen-campaign-empty">Този екран е свободен.</div>'}
               ${active.length > 3 ? `<div class="screen-more-count">+ още ${active.length - 3}</div>` : ''}
@@ -755,7 +968,7 @@
 
     for (const box of rows){
       const requestId = box.dataset.playlistPreview;
-      const r = loadRequests().find(x => x.id === requestId);
+      const r = findPlaylistItem(requestId);
       const creative = campaignCreative(r);
 
       if (!creative?.key){
@@ -790,7 +1003,7 @@
     playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
     playlistPreviewUrls = [];
 
-    const items = screenPlaylistRequests(screenId);
+    const items = allPlaylistItems(screenId);
     const playing = items.filter(r => !getScreenSetting(r, screenId).paused);
     const pausedCount = items.length - playing.length;
     const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
@@ -836,15 +1049,14 @@
             <div class="playlist-copy">
               <div class="playlist-title-row">
                 <div>
-                  <span class="section-kicker">${esc(r.id)}</span>
-                  <h3>${esc(r.company || r.name || 'Кампания')}</h3>
+                  <span class="section-kicker">${isInternalAd(r)?'СОБСТВЕНА РЕКЛАМА':esc(r.id)}</span>
+                  <h3>${esc(isInternalAd(r)?(r.title||'Собствена реклама'):(r.company || r.name || 'Кампания'))}</h3>
                 </div>
                 <span class="playlist-state ${setting.paused ? 'paused' : 'playing'}">${setting.paused ? 'ПАУЗА' : 'ИЗЛЪЧВА СЕ'}</span>
               </div>
 
               <div class="playlist-meta">
-                <span>До ${formatDateOnly(r.expiresAt)}</span>
-                <span>${campaignTimeLeftText(r)}</span>
+                ${isInternalAd(r)?'<span>Без клиентска заявка</span><span>Без крайна дата</span>':`<span>До ${formatDateOnly(r.expiresAt)}</span><span>${campaignTimeLeftText(r)}</span>`}
               </div>
 
               <div class="playlist-controls">
@@ -863,9 +1075,7 @@
                   ${setting.paused ? 'Пусни отново' : 'Пауза само тук'}
                 </button>
 
-                <button type="button" class="btn btn-light" data-open-request="${esc(r.id)}">
-                  Заявка
-                </button>
+                ${isInternalAd(r)?`<button type="button" class="btn btn-light" data-edit-internal-ad="${esc(r.id)}">Редактирай</button>`:`<button type="button" class="btn btn-light" data-open-request="${esc(r.id)}">Заявка</button>`}
               </div>
             </div>
           </article>`;
@@ -877,46 +1087,23 @@
   }
 
   function updateScreenSetting(requestId, screenId, patch){
-    const requests = loadRequests();
-    const r = requests.find(x => x.id === requestId);
-    if (!r) return;
-
-    if (!r.screenSettings) r.screenSettings = {};
-    const current = getScreenSetting(r, screenId);
-    r.screenSettings[screenId] = {...current, ...patch};
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-    renderAll();
-    renderScreenPlaylist(screenId);
+    const item=findPlaylistItem(requestId); if(!item)return;
+    if(!item.screenSettings)item.screenSettings={};
+    item.screenSettings[screenId]={...getScreenSetting(item,screenId),...patch};
+    savePlaylistItem(item);
+    renderAll(); renderScreenPlaylist(screenId);
   }
 
   function movePlaylistItem(requestId, screenId, direction){
-    const requests = ensureScreenSettings(loadRequests(), screenId);
-    const active = requests
-      .filter(r => r.status === 'active' && (r.assignedScreens || []).includes(screenId))
-      .sort((a,b) => (getScreenSetting(a,screenId).order ?? 999999) - (getScreenSetting(b,screenId).order ?? 999999));
-
-    const index = active.findIndex(r => r.id === requestId);
-    if (index < 0) return;
-
-    const swapIndex = direction === 'up' ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= active.length) return;
-
-    const a = active[index];
-    const b = active[swapIndex];
-
-    if (!a.screenSettings) a.screenSettings = {};
-    if (!b.screenSettings) b.screenSettings = {};
-
-    const aSetting = getScreenSetting(a, screenId);
-    const bSetting = getScreenSetting(b, screenId);
-
-    a.screenSettings[screenId] = {...aSetting, order:bSetting.order};
-    b.screenSettings[screenId] = {...bSetting, order:aSetting.order};
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-    renderAll();
-    renderScreenPlaylist(screenId);
+    const items=allPlaylistItems(screenId);
+    const index=items.findIndex(x=>x.id===requestId); if(index<0)return;
+    const swapIndex=direction==='up'?index-1:index+1; if(swapIndex<0||swapIndex>=items.length)return;
+    const a=items[index], b=items[swapIndex];
+    const ao=getScreenSetting(a,screenId).order, bo=getScreenSetting(b,screenId).order;
+    if(!a.screenSettings)a.screenSettings={}; if(!b.screenSettings)b.screenSettings={};
+    a.screenSettings[screenId]={...getScreenSetting(a,screenId),order:bo};
+    b.screenSettings[screenId]={...getScreenSetting(b,screenId),order:ao};
+    savePlaylistItem(a); savePlaylistItem(b); renderAll(); renderScreenPlaylist(screenId);
   }
 
   function renderCreatives(){
@@ -1582,6 +1769,15 @@
     const openPlaylist = e.target.closest('[data-open-playlist]');
     if (openPlaylist) renderScreenPlaylist(openPlaylist.dataset.openPlaylist);
 
+    const editInternal = e.target.closest('[data-edit-internal-ad]');
+    if (editInternal) openInternalAdDialog(editInternal.dataset.editInternalAd);
+
+    const toggleInternal = e.target.closest('[data-toggle-internal-ad]');
+    if (toggleInternal) toggleInternalAd(toggleInternal.dataset.toggleInternalAd);
+
+    const deleteInternal = e.target.closest('[data-delete-internal-ad]');
+    if (deleteInternal) deleteInternalAd(deleteInternal.dataset.deleteInternalAd);
+
     const movePlaylist = e.target.closest('[data-playlist-move]');
     if (movePlaylist && activePlaylistScreenId) {
       movePlaylistItem(movePlaylist.dataset.requestId, activePlaylistScreenId, movePlaylist.dataset.playlistMove);
@@ -1589,7 +1785,7 @@
 
     const pausePlaylist = e.target.closest('[data-playlist-pause]');
     if (pausePlaylist && activePlaylistScreenId) {
-      const r = loadRequests().find(x => x.id === pausePlaylist.dataset.playlistPause);
+      const r = findPlaylistItem(pausePlaylist.dataset.playlistPause);
       if (r) {
         const setting = getScreenSetting(r, activePlaylistScreenId);
         updateScreenSetting(r.id, activePlaylistScreenId, {paused:!setting.paused});
@@ -1658,6 +1854,7 @@
     }
   });
 
+  document.getElementById('addInternalAdBtn')?.addEventListener('click', () => openInternalAdDialog());
   document.getElementById('closeDrawer').addEventListener('click', closeRequest);
   backdrop.addEventListener('click', closeRequest);
   document.getElementById('requestSearch').addEventListener('input', renderRequests);
@@ -1674,6 +1871,7 @@
     renderDashboard();
     renderRequests();
     renderClients();
+    renderInternalAds();
     renderScreens();
     renderCreatives();
   }
@@ -1691,6 +1889,6 @@
 
   // Update admin if a public form in another tab adds a request.
   window.addEventListener('storage', (e) => {
-    if (e.key === STORAGE_KEY) renderAll();
+    if (e.key === STORAGE_KEY || e.key === INTERNAL_ADS_KEY) renderAll();
   });
 })();

@@ -947,3 +947,31 @@ button{cursor:pointer}
     display:grid;
   }
 }
+
+
+/* Internal / house ads v2.4 */
+.internal-ads-panel{margin-bottom:18px}
+.internal-ads-empty,.internal-ads-panel:not(:empty){border:1px solid var(--line);border-radius:18px;background:#fff}
+.internal-ads-empty{padding:16px}
+.internal-ads-empty strong,.internal-ads-empty span{display:block}
+.internal-ads-empty span{margin-top:4px;color:var(--muted);line-height:1.45}
+.internal-ads-head{display:flex;gap:9px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.internal-ads-head span{color:var(--muted);font-size:12px;font-weight:800}
+.internal-ad-list{display:grid}
+.internal-ad-row{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.internal-ad-row:last-child{border-bottom:0}
+.internal-ad-row.is-disabled{opacity:.62;background:#faf8f3}
+.internal-ad-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:11px;background:#111;color:#fff;font-weight:950}
+.internal-ad-copy{min-width:0}
+.internal-ad-title-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.internal-ad-copy>span{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.internal-ad-badge,.internal-ad-off{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;font-size:9px;font-weight:950;letter-spacing:.05em}
+.internal-ad-badge{background:#eef3ff;color:#244d9d;border:1px solid #d8e3ff}
+.internal-ad-off{background:#fff1dc;color:#8f5d18;border:1px solid #ecd0a5}
+.internal-ad-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.internal-ad-form{display:grid;gap:14px;margin-top:14px}
+.internal-ad-form>label>span,.internal-ad-label{display:block;margin-bottom:6px;color:var(--muted);font-size:12px;font-weight:900}
+.internal-ad-form input[type="text"],.internal-ad-form select{width:100%;min-height:44px;padding:0 12px;border:1px solid #d6cfc2;border-radius:11px;background:#fff;font:inherit}
+.internal-ad-form input[type="text"]:focus,.internal-ad-form select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,76,201,.09)}
+@media(max-width:760px){.internal-ad-row{grid-template-columns:40px 1fr}.internal-ad-actions{grid-column:1/-1;justify-content:stretch}.internal-ad-actions .btn{flex:1}}
+@media(max-width:560px){#addInternalAdBtn{width:100%}}
