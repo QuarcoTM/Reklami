@@ -69,6 +69,9 @@
       status,
       active:status === 'published',
       yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
+      broadcastHoursPerDay:Number.isFinite(Number(screen?.broadcastHoursPerDay))
+        ? Math.min(24, Math.max(1, Number(screen.broadcastHoursPerDay)))
+        : null,
       photo:screen?.photo && screen.photo.key ? {
         key:String(screen.photo.key),
         name:String(screen.photo.name || 'screen-photo'),
@@ -105,6 +108,47 @@
 
   function isScreenPublished(screen){
     return screen?.status === 'published';
+  }
+
+  function formatApprox(value){
+    if (!Number.isFinite(value) || value <= 0) return '—';
+    if (value >= 1000) return `~${Math.round(value).toLocaleString('bg-BG')}`;
+    if (value >= 10) return `~${Math.round(value)}`;
+    return `~${value.toFixed(1)}`;
+  }
+
+  function screenRotationStats(screenId){
+    const screen = screenById(screenId);
+    const items = allPlaylistItems(screenId)
+      .filter(item => !getScreenSetting(item, screenId).paused);
+
+    const cycleSeconds = items.reduce(
+      (sum,item) => sum + Number(getScreenSetting(item, screenId).duration || 0),
+      0
+    );
+
+    const hoursPerDay = screen?.broadcastHoursPerDay ?? null;
+
+    if (!items.length || cycleSeconds <= 0){
+      return {
+        items,
+        cycleSeconds:0,
+        rotationsPerHour:0,
+        rotationsPerDay:null,
+        hoursPerDay
+      };
+    }
+
+    const rotationsPerHour = 3600 / cycleSeconds;
+    const rotationsPerDay = hoursPerDay ? rotationsPerHour * hoursPerDay : null;
+
+    return {
+      items,
+      cycleSeconds,
+      rotationsPerHour,
+      rotationsPerDay,
+      hoursPerDay
+    };
   }
 
   function screenStatusLabel(screen){
@@ -1172,6 +1216,12 @@
             </div>
 
             <label>
+              <span>Часове излъчване на ден <small>(по желание)</small></span>
+              <input id="screenManageHours" type="number" min="1" max="24" step="0.5" inputmode="decimal" placeholder="Напр. 12">
+              <small class="field-help">Само за прогнозата на излъчванията на ден. Ако е празно, ще показваме само излъчвания на час.</small>
+            </label>
+
+            <label>
               <span>Yodeck Player ID <small>(по желание, за по-късно)</small></span>
               <input id="screenManageYodeck" type="text" placeholder="Ще го добавим след свързване с Yodeck">
             </label>
@@ -1235,6 +1285,8 @@
         const name = dialog.querySelector('#screenManageName').value.trim();
         const description = dialog.querySelector('#screenManageDescription').value.trim();
         const yodeckPlayerId = dialog.querySelector('#screenManageYodeck').value.trim();
+        const hoursRaw = dialog.querySelector('#screenManageHours').value.trim();
+        const broadcastHoursPerDay = hoursRaw === '' ? null : Number(hoursRaw);
         const photoFile = dialog.querySelector('#screenManagePhoto').files?.[0] || null;
         const removePhoto = dialog.dataset.removePhoto === '1';
         const error = dialog.querySelector('#screenManageError');
@@ -1244,6 +1296,12 @@
 
         if (!name){
           error.textContent = 'Напиши име на екрана.';
+          error.hidden = false;
+          return;
+        }
+
+        if (broadcastHoursPerDay !== null && (!Number.isFinite(broadcastHoursPerDay) || broadcastHoursPerDay < 1 || broadcastHoursPerDay > 24)){
+          error.textContent = 'Часовете излъчване на ден трябва да са между 1 и 24.';
           error.hidden = false;
           return;
         }
@@ -1300,6 +1358,7 @@
             target.name = name;
             target.description = description;
             target.yodeckPlayerId = yodeckPlayerId;
+            target.broadcastHoursPerDay = broadcastHoursPerDay;
             target.photo = newPhoto;
             target.updatedAt = new Date().toISOString();
           }else{
@@ -1311,6 +1370,7 @@
               status:'hidden',
               active:false,
               yodeckPlayerId,
+              broadcastHoursPerDay,
               photo:newPhoto,
               createdAt:now,
               updatedAt:now
@@ -1338,6 +1398,7 @@
     dialog.querySelector('#screenManageTitle').textContent = existing ? 'Редактирай екран' : 'Добави екран';
     dialog.querySelector('#screenManageName').value = existing?.name || '';
     dialog.querySelector('#screenManageDescription').value = existing?.description || '';
+    dialog.querySelector('#screenManageHours').value = existing?.broadcastHoursPerDay ?? '';
     dialog.querySelector('#screenManageYodeck').value = existing?.yodeckPlayerId || '';
     dialog.querySelector('#screenManagePhoto').value = '';
     dialog.querySelector('#screenManageError').hidden = true;
@@ -1692,6 +1753,7 @@
       const playing = isScreenPublished(screen) ? configuredPlaying : [];
       const paused = active.length - configuredPlaying.length;
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
+      const rotationStats = screenRotationStats(screen.id);
 
       const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
       const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
@@ -1716,6 +1778,20 @@
             <div class="screen-summary-grid">
               <div><span>Цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
               <div><span>Пауза</span><strong>${paused}</strong></div>
+            </div>
+
+            <div class="screen-rotation-mini">
+              <div>
+                <span>≈ излъчвания / час</span>
+                <strong>${rotationStats.cycleSeconds ? formatApprox(rotationStats.rotationsPerHour) : '—'}</strong>
+              </div>
+              <div>
+                <span>≈ излъчвания / ден</span>
+                <strong>${rotationStats.rotationsPerDay ? formatApprox(rotationStats.rotationsPerDay) : '—'}</strong>
+              </div>
+              ${rotationStats.hoursPerDay
+                ? `<small>При ${rotationStats.hoursPerDay} ч. излъчване дневно.</small>`
+                : `<small>За дневна прогноза задай часове/ден от „Редактирай“.</small>`}
             </div>
 
             <div class="screen-campaign-list">
@@ -1920,12 +1996,33 @@
             ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
             : 'Няма активни кампании, разпределени към този екран.');
 
+    const stats = screenRotationStats(screenId);
+
     dialog.querySelector('#playlistSummary').innerHTML = `
       <div><span>Активни кампании</span><strong>${items.length}</strong></div>
       <div><span>В момента се излъчват</span><strong>${playing.length}</strong></div>
       <div><span>На пауза</span><strong>${pausedCount}</strong></div>
       <div><span>Общ цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
+      <div class="playlist-stat-highlight">
+        <span>≈ излъчвания / час</span>
+        <strong>${stats.cycleSeconds ? formatApprox(stats.rotationsPerHour) : '—'}</strong>
+      </div>
+      <div class="playlist-stat-highlight">
+        <span>≈ излъчвания / ден</span>
+        <strong>${stats.rotationsPerDay ? formatApprox(stats.rotationsPerDay) : '—'}</strong>
+      </div>
     `;
+
+    const oldEstimateNote = dialog.querySelector('#playlistEstimateNote');
+    if (oldEstimateNote) oldEstimateNote.remove();
+
+    const estimateNote = document.createElement('div');
+    estimateNote.id = 'playlistEstimateNote';
+    estimateNote.className = 'playlist-estimate-note';
+    estimateNote.innerHTML = stats.cycleSeconds
+      ? `При текущ цикъл от <strong>${stats.cycleSeconds} сек.</strong> всяка непаузирана реклама се появява приблизително <strong>${formatApprox(stats.rotationsPerHour)}</strong> пъти на час.${stats.rotationsPerDay ? ` При <strong>${stats.hoursPerDay} ч.</strong> работа това са около <strong>${formatApprox(stats.rotationsPerDay)}</strong> излъчвания на ден.` : ' Задай часовете работа от „Редактирай екран“, за да получиш и дневна прогноза.'}<span>Това са излъчвания на playlist-а, не измерени гледания от хора.</span>`
+      : 'Добави поне една непаузирана реклама, за да изчислим честотата на излъчване.';
+    dialog.querySelector('#playlistSummary').after(estimateNote);
 
     const previewable = configuredPlaying.length;
     const previewCycle = configuredPlaying.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
@@ -1973,6 +2070,17 @@
               <div class="playlist-meta">
                 ${isInternalAd(r)?'<span>Без клиентска заявка</span><span>Без крайна дата</span>':`<span>До ${formatDateOnly(r.expiresAt)}</span><span>${campaignTimeLeftText(r)}</span>`}
               </div>
+
+              ${setting.paused ? `
+                <div class="playlist-row-frequency is-paused-estimate">
+                  <span>На пауза — не участва в прогнозата</span>
+                </div>
+              ` : `
+                <div class="playlist-row-frequency">
+                  <span>${stats.cycleSeconds ? `${formatApprox(stats.rotationsPerHour)} / час` : '— / час'}</span>
+                  ${stats.rotationsPerDay ? `<span>${formatApprox(stats.rotationsPerDay)} / ден</span>` : ''}
+                </div>
+              `}
 
               <div class="playlist-controls">
                 <label>
