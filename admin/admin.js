@@ -2,6 +2,7 @@
 (() => {
   const STORAGE_KEY = 'ks_demo_requests_v1';
   const INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
+  const SCREENS_KEY = 'ks_screens_v1';
 
   let adminModalScrollY = 0;
 
@@ -48,14 +49,64 @@
     city: 'CITY'
   };
 
-  const SCREEN_CATALOG = [
-    {id:'funeral', name:'Траурна агенция', tvLabel:'ТРАУРНА<br>АГЕНЦИЯ', description:'Пилотен екран · адресът ще се добави по-късно.'},
-    {id:'pharmacy', name:'Аптека', tvLabel:'АПТЕКА', description:'Планирана локация.'},
-    {id:'restaurant', name:'Заведение', tvLabel:'ЗАВЕДЕНИЕ', description:'Планирана локация.'}
+  const DEFAULT_SCREEN_CATALOG = [
+    {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:''},
+    {id:'pharmacy', name:'Аптека', description:'Планирана локация.', active:true, yodeckPlayerId:''},
+    {id:'restaurant', name:'Заведение', description:'Планирана локация.', active:true, yodeckPlayerId:''}
   ];
+
+  function normalizeScreen(screen){
+    return {
+      id:String(screen?.id || '').trim(),
+      name:String(screen?.name || 'Екран').trim(),
+      description:String(screen?.description || '').trim(),
+      active:screen?.active !== false,
+      yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
+      createdAt:screen?.createdAt || null,
+      updatedAt:screen?.updatedAt || null
+    };
+  }
+
+  function loadScreenCatalog(){
+    try{
+      const raw = JSON.parse(localStorage.getItem(SCREENS_KEY) || 'null');
+      if (Array.isArray(raw) && raw.length){
+        return raw.map(normalizeScreen).filter(s => s.id && s.name);
+      }
+    }catch(e){}
+    const defaults = DEFAULT_SCREEN_CATALOG.map(s => ({...s}));
+    localStorage.setItem(SCREENS_KEY, JSON.stringify(defaults));
+    return defaults;
+  }
+
+  function saveScreenCatalog(screens){
+    SCREEN_CATALOG = screens.map(normalizeScreen).filter(s => s.id && s.name);
+    localStorage.setItem(SCREENS_KEY, JSON.stringify(SCREEN_CATALOG));
+  }
+
+  let SCREEN_CATALOG = loadScreenCatalog();
 
   function screenById(id){
     return SCREEN_CATALOG.find(s => s.id === id) || null;
+  }
+
+  function selectableScreens(currentIds=[]){
+    const current = new Set(currentIds || []);
+    return SCREEN_CATALOG.filter(screen => screen.active !== false || current.has(screen.id));
+  }
+
+  function screenLabelHTML(screen){
+    return esc(screen?.name || 'Екран').replace(/\s+/g,'<br>');
+  }
+
+  function makeScreenId(){
+    return `screen-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  }
+
+  function screenUsage(screenId){
+    const requests = loadRequests().filter(r => (r.assignedScreens || []).includes(screenId));
+    const internalAds = loadInternalAds().filter(ad => (ad.assignedScreens || []).includes(screenId));
+    return {requests, internalAds, total:requests.length + internalAds.length};
   }
 
   function assignedScreenNames(r){
@@ -63,16 +114,21 @@
   }
 
   function screenLimitText(r){
-    if (r.package === 'single') return 'SINGLE: избери точно 1 екран.';
-    if (r.package === 'local') return 'LOCAL: избери до 3 екрана.';
-    return 'CITY: стандартно 4–5 екрана. В demo режима можеш да разпределиш към наличните в момента локации.';
+    if (r.package === 'single') return 'SINGLE: избери точно 1 активен екран.';
+    if (r.package === 'local') return 'LOCAL: избери от 1 до 3 активни екрана.';
+    const activeCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+    return activeCount >= 4
+      ? 'CITY: избери 4 или 5 активни екрана.'
+      : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните активни екрани.';
   }
 
   function screenSelectionValidForActivation(r){
-    const count = (r.assignedScreens || []).length;
+    const valid = (r.assignedScreens || []).filter(id => screenById(id)?.active !== false && screenById(id));
+    const count = valid.length;
     if (r.package === 'single') return count === 1;
     if (r.package === 'local') return count >= 1 && count <= 3;
-    return count >= 1;
+    const activeCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+    return activeCount >= 4 ? count >= 4 && count <= 5 : count >= 1;
   }
 
 
@@ -726,6 +782,153 @@
       </article>`).join('');
   }
 
+  function openScreenDialog(id=null){
+    const existing = id ? screenById(id) : null;
+
+    let dialog = document.getElementById('screenManageDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'screenManageDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog screen-manage-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ЕКРАН / ЛОКАЦИЯ</span>
+              <h3 id="screenManageTitle">Добави екран</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+
+          <p class="change-dialog-help">Новият екран ще се появи автоматично при разпределяне на кампании и при собствени реклами.</p>
+
+          <div class="internal-ad-form">
+            <label>
+              <span>Име на екрана / локацията</span>
+              <input id="screenManageName" type="text" placeholder="Напр. Фризьорски салон">
+            </label>
+
+            <label>
+              <span>Описание / адрес <small>(по желание)</small></span>
+              <input id="screenManageDescription" type="text" placeholder="Напр. бул. България 12 · витрина">
+            </label>
+
+            <label>
+              <span>Yodeck Player ID <small>(по желание, за по-късно)</small></span>
+              <input id="screenManageYodeck" type="text" placeholder="Ще го добавим след свързване с Yodeck">
+            </label>
+
+            <div class="change-dialog-error" id="screenManageError" hidden></div>
+          </div>
+
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-screen-manage-cancel>Отказ</button>
+            <button type="button" class="btn btn-primary" data-screen-manage-save>Запази екрана</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        if (!dialog.classList.contains('show')) return;
+        dialog.classList.remove('show');
+        dialog.dataset.screenId = '';
+        unlockAdminPageScroll();
+      };
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-screen-manage-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+
+      dialog.querySelector('[data-screen-manage-save]').addEventListener('click', () => {
+        const screenId = dialog.dataset.screenId || '';
+        const name = dialog.querySelector('#screenManageName').value.trim();
+        const description = dialog.querySelector('#screenManageDescription').value.trim();
+        const yodeckPlayerId = dialog.querySelector('#screenManageYodeck').value.trim();
+        const error = dialog.querySelector('#screenManageError');
+
+        if (!name){
+          error.textContent = 'Напиши име на екрана.';
+          error.hidden = false;
+          return;
+        }
+
+        const screens = loadScreenCatalog();
+        const duplicate = screens.find(s => s.name.toLowerCase() === name.toLowerCase() && s.id !== screenId);
+        if (duplicate){
+          error.textContent = 'Вече има екран с това име.';
+          error.hidden = false;
+          return;
+        }
+
+        if (screenId){
+          const target = screens.find(s => s.id === screenId);
+          if (!target) return;
+          target.name = name;
+          target.description = description;
+          target.yodeckPlayerId = yodeckPlayerId;
+          target.updatedAt = new Date().toISOString();
+        }else{
+          const now = new Date().toISOString();
+          screens.push({
+            id:makeScreenId(),
+            name,
+            description,
+            active:true,
+            yodeckPlayerId,
+            createdAt:now,
+            updatedAt:now
+          });
+        }
+
+        saveScreenCatalog(screens);
+        close();
+        renderAll();
+        toast(screenId ? 'Екранът е обновен.' : 'Новият екран е добавен.');
+      });
+    }
+
+    dialog.dataset.screenId = existing?.id || '';
+    dialog.querySelector('#screenManageTitle').textContent = existing ? 'Редактирай екран' : 'Добави екран';
+    dialog.querySelector('#screenManageName').value = existing?.name || '';
+    dialog.querySelector('#screenManageDescription').value = existing?.description || '';
+    dialog.querySelector('#screenManageYodeck').value = existing?.yodeckPlayerId || '';
+    dialog.querySelector('#screenManageError').hidden = true;
+
+    lockAdminPageScroll();
+    dialog.classList.add('show');
+    requestAnimationFrame(() => dialog.querySelector('#screenManageName')?.focus());
+  }
+
+  function toggleScreen(id){
+    const screens = loadScreenCatalog();
+    const screen = screens.find(s => s.id === id);
+    if (!screen) return;
+
+    screen.active = screen.active === false;
+    screen.updatedAt = new Date().toISOString();
+    saveScreenCatalog(screens);
+    renderAll();
+
+    if (activePlaylistScreenId === id) renderScreenPlaylist(id);
+    toast(screen.active ? 'Екранът е включен.' : 'Екранът е временно спрян.');
+  }
+
+  function deleteScreen(id){
+    const screen = screenById(id);
+    if (!screen) return;
+
+    const usage = screenUsage(id);
+    if (usage.total){
+      toast(`Екранът се използва в ${usage.total} запис${usage.total===1?'':'а'}. Спри го вместо да го изтриваш.`);
+      return;
+    }
+
+    if (!confirm(`Изтрий екрана „${screen.name}“?`)) return;
+    saveScreenCatalog(loadScreenCatalog().filter(s => s.id !== id));
+    renderAll();
+    toast('Екранът е изтрит.');
+  }
+
   function renderInternalAds(){
     const box = document.getElementById('internalAdsPanel');
     if (!box) return;
@@ -861,8 +1064,8 @@
     existingFile.hidden=!existing?.file;
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
     const selected=new Set(existing?.assignedScreens||[]);
-    dialog.querySelector('#internalAdScreens').innerHTML=SCREEN_CATALOG.map(screen=>`
-      <label class="screen-option"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}</strong><small>${esc(screen.description)}</small></span></label>`).join('');
+    dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>`
+      <label class="screen-option ${screen.active===false?'is-screen-off':''}"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${screen.active===false?'disabled':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}${screen.active===false?' · СПРЯН':''}</strong><small>${esc(screen.description||'Без описание')}</small></span></label>`).join('');
     lockAdminPageScroll();
     dialog.classList.add('show');
     requestAnimationFrame(() => {
@@ -894,22 +1097,23 @@
       ensureScreenSettings(requests, screen.id);
 
       const active = allPlaylistItems(screen.id);
-
-      const playing = active.filter(r => !getScreenSetting(r, screen.id).paused);
-      const paused = active.length - playing.length;
+      const configuredPlaying = active.filter(r => !getScreenSetting(r, screen.id).paused);
+      const playing = screen.active === false ? [] : configuredPlaying;
+      const paused = active.length - configuredPlaying.length;
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
 
       return `
-        <article class="screen-card panel">
-          <div class="screen-preview"><div class="fake-tv"><span>${screen.tvLabel}</span></div></div>
+        <article class="screen-card panel ${screen.active===false?'screen-is-disabled':''}">
+          <div class="screen-preview"><div class="fake-tv"><span>${screenLabelHTML(screen)}</span></div></div>
           <div class="screen-meta">
             <div class="screen-card-top">
-              <span class="status-pill ${playing.length ? 'status-active' : 'status-draft'}">
-                ${playing.length ? `${playing.length} ${playing.length === 1 ? 'излъчвана реклама' : 'излъчвани реклами'}` : 'Няма излъчвани реклами'}
+              <span class="status-pill ${screen.active===false?'status-done':(playing.length ? 'status-active' : 'status-draft')}">
+                ${screen.active===false ? 'ЕКРАНЪТ Е СПРЯН' : (playing.length ? `${playing.length} ${playing.length === 1 ? 'излъчвана реклама' : 'излъчвани реклами'}` : 'Няма излъчвани реклами')}
               </span>
             </div>
             <h3>${esc(screen.name)}</h3>
-            <p>${esc(screen.description)}</p>
+            <p>${esc(screen.description || 'Без добавено описание.')}</p>
+            ${screen.yodeckPlayerId ? `<div class="screen-yodeck-id">Yodeck ID: <strong>${esc(screen.yodeckPlayerId)}</strong></div>` : ''}
 
             <div class="screen-summary-grid">
               <div><span>Цикъл</span><strong>${cycle ? `${cycle} сек.` : '—'}</strong></div>
@@ -934,6 +1138,12 @@
             <button class="btn btn-primary screen-playlist-open" data-open-playlist="${esc(screen.id)}">
               Отвори плейлиста
             </button>
+
+            <div class="screen-manage-actions">
+              <button class="btn btn-light" data-edit-screen="${esc(screen.id)}">Редактирай</button>
+              <button class="btn ${screen.active===false?'btn-success':'btn-warning'}" data-toggle-screen="${esc(screen.id)}">${screen.active===false?'Включи':'Спри екрана'}</button>
+              <button class="btn btn-danger" data-delete-screen="${esc(screen.id)}">Изтрий</button>
+            </div>
           </div>
         </article>`;
     }).join('');
@@ -1030,15 +1240,18 @@
     playlistPreviewUrls = [];
 
     const items = allPlaylistItems(screenId);
-    const playing = items.filter(r => !getScreenSetting(r, screenId).paused);
-    const pausedCount = items.length - playing.length;
+    const configuredPlaying = items.filter(r => !getScreenSetting(r, screenId).paused);
+    const playing = screen.active === false ? [] : configuredPlaying;
+    const pausedCount = items.length - configuredPlaying.length;
     const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
 
     dialog.querySelector('#playlistDialogTitle').textContent = `${screen.name} — Playlist`;
     dialog.querySelector('#playlistDialogSubtitle').textContent =
-      items.length
-        ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
-        : 'Няма активни кампании, разпределени към този екран.';
+      screen.active === false
+        ? 'Екранът е временно спрян. Playlist-ът е запазен, но нищо не се счита за излъчвано.'
+        : (items.length
+          ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
+          : 'Няма активни кампании, разпределени към този екран.');
 
     dialog.querySelector('#playlistSummary').innerHTML = `
       <div><span>Активни кампании</span><strong>${items.length}</strong></div>
@@ -1509,6 +1722,13 @@
           return;
         }
 
+        const activeNetworkCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+        if (req.package === 'city' && activeNetworkCount >= 4 && (selected.length < 4 || selected.length > 5)){
+          error.textContent = 'Пакет CITY трябва да бъде на 4 или 5 активни екрана.';
+          error.hidden = false;
+          return;
+        }
+
         req.assignedScreens = selected;
         req.screensAssignedAt = new Date().toISOString();
 
@@ -1530,13 +1750,13 @@
     const inputType = r.package === 'single' ? 'radio' : 'checkbox';
     const options = dialog.querySelector('#screenAssignmentOptions');
 
-    options.innerHTML = SCREEN_CATALOG.map(screen => `
-      <label class="screen-option">
-        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''}>
+    options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => `
+      <label class="screen-option ${screen.active===false?'is-screen-off':''}">
+        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''} ${screen.active===false?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}</strong>
-          <small>${esc(screen.description)}</small>
+          <strong>${esc(screen.name)}${screen.active===false?' · СПРЯН':''}</strong>
+          <small>${esc(screen.description || 'Без описание')}</small>
         </span>
       </label>`).join('');
 
@@ -1547,6 +1767,21 @@
           if (checked.length > 3){
             input.checked = false;
             dialog.querySelector('#screenAssignmentError').textContent = 'LOCAL допуска максимум 3 екрана.';
+            dialog.querySelector('#screenAssignmentError').hidden = false;
+          }else{
+            dialog.querySelector('#screenAssignmentError').hidden = true;
+          }
+        });
+      });
+    }
+
+    if (r.package === 'city'){
+      options.querySelectorAll('input').forEach(input => {
+        input.addEventListener('change', () => {
+          const checked = [...options.querySelectorAll('input:checked')];
+          if (checked.length > 5){
+            input.checked = false;
+            dialog.querySelector('#screenAssignmentError').textContent = 'CITY допуска максимум 5 екрана.';
             dialog.querySelector('#screenAssignmentError').hidden = false;
           }else{
             dialog.querySelector('#screenAssignmentError').hidden = true;
@@ -1795,6 +2030,15 @@
     const openPlaylist = e.target.closest('[data-open-playlist]');
     if (openPlaylist) renderScreenPlaylist(openPlaylist.dataset.openPlaylist);
 
+    const editScreen = e.target.closest('[data-edit-screen]');
+    if (editScreen) openScreenDialog(editScreen.dataset.editScreen);
+
+    const toggleScreenBtn = e.target.closest('[data-toggle-screen]');
+    if (toggleScreenBtn) toggleScreen(toggleScreenBtn.dataset.toggleScreen);
+
+    const deleteScreenBtn = e.target.closest('[data-delete-screen]');
+    if (deleteScreenBtn) deleteScreen(deleteScreenBtn.dataset.deleteScreen);
+
     const editInternal = e.target.closest('[data-edit-internal-ad]');
     if (editInternal) openInternalAdDialog(editInternal.dataset.editInternalAd);
 
@@ -1880,6 +2124,7 @@
     }
   });
 
+  document.getElementById('addScreenBtn')?.addEventListener('click', () => openScreenDialog());
   document.getElementById('addInternalAdBtn')?.addEventListener('click', () => openInternalAdDialog());
   document.getElementById('closeDrawer').addEventListener('click', closeRequest);
   backdrop.addEventListener('click', closeRequest);

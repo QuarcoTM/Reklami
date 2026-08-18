@@ -1018,3 +1018,66 @@ body.admin-modal-open{
     padding-bottom:calc(18px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* Dynamic screen management v2.5 */
+.screen-head-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+}
+.screen-manage-dialog{
+  width:min(620px,100%);
+  max-height:calc(100dvh - 32px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.screen-manage-dialog small{
+  font-weight:700;
+  color:var(--muted);
+}
+.screen-manage-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:7px;
+  margin-top:8px;
+}
+.screen-yodeck-id{
+  margin-top:8px;
+  padding:8px 9px;
+  border-radius:9px;
+  background:#f4f5f8;
+  color:var(--muted);
+  font-size:11px;
+}
+.screen-is-disabled{
+  background:#faf8f3;
+}
+.screen-is-disabled .screen-preview{
+  opacity:.58;
+}
+.screen-is-disabled .screen-campaign-row{
+  opacity:.65;
+}
+.screen-option.is-screen-off{
+  opacity:.58;
+  cursor:not-allowed;
+}
+.screen-option.is-screen-off input{
+  pointer-events:none;
+}
+@media(max-width:700px){
+  .screen-head-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .screen-head-actions .btn{
+    width:100%;
+  }
+  .screen-manage-actions{
+    grid-template-columns:1fr;
+  }
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f8f6f0">
-  <link rel="stylesheet" href="admin.css?v=2.4.1">
+  <link rel="stylesheet" href="admin.css?v=2.5">
   <title>Admin — Kyustendil Screen</title>
   <meta name="robots" content="noindex,nofollow,noarchive">
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
@@ -215,8 +215,11 @@
         <!-- Screens -->
         <section class="view" data-view-panel="screens">
           <div class="view-head">
-            <div><span class="section-kicker">МРЕЖА</span><h1>Екрани</h1><p>Виж кои активни кампании са разпределени към всяка локация. Реалната връзка със signage системата ще добавим на следващ етап.</p></div>
-            <button class="btn btn-primary" id="addInternalAdBtn">+ Добави собствена реклама</button>
+            <div><span class="section-kicker">МРЕЖА</span><h1>Екрани</h1><p>Добавяй и управлявай локациите сам. Новите екрани автоматично влизат в разпределянето и playlist-ите.</p></div>
+            <div class="screen-head-actions">
+              <button class="btn btn-light" id="addScreenBtn">+ Добави екран</button>
+              <button class="btn btn-primary" id="addInternalAdBtn">+ Добави собствена реклама</button>
+            </div>
           </div>
           <div id="internalAdsPanel" class="internal-ads-panel"></div>
           <div id="screensGrid" class="screens-grid"></div>
@@ -248,6 +251,6 @@
   </aside>
 
   <div class="toast" id="adminToast"></div>
-  <script src="admin.js?v=2.4.1"></script>
+  <script src="admin.js?v=2.5"></script>
 </body>
 </html>
