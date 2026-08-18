@@ -1173,3 +1173,18 @@ body.admin-modal-open{
     grid-column:auto;
   }
 }
+
+
+/* v2.6.1 — deterministic screen navigation */
+#screenPlaylistDialog.playlist-dialog-backdrop,
+#screenManageDialog.change-dialog-backdrop,
+#deleteScreenDialog.change-dialog-backdrop{
+  overscroll-behavior:none;
+}
+
+#screenPlaylistDialog .playlist-dialog,
+#screenManageDialog .screen-manage-dialog,
+#deleteScreenDialog .delete-screen-dialog{
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}

@@ -7,12 +7,14 @@
   let adminModalScrollY = 0;
 
   function lockAdminPageScroll(){
+    if (document.body.classList.contains('admin-modal-open')) return;
     adminModalScrollY = window.scrollY || window.pageYOffset || 0;
     document.body.classList.add('admin-modal-open');
     document.body.style.top = `-${adminModalScrollY}px`;
   }
 
   function unlockAdminPageScroll(){
+    if (!document.body.classList.contains('admin-modal-open')) return;
     document.body.classList.remove('admin-modal-open');
     document.body.style.top = '';
     window.scrollTo(0, adminModalScrollY);
@@ -517,10 +519,55 @@
       : 'all';
   }
 
+  function screenOverlayIsOpen(){
+    return Boolean(
+      document.getElementById('screenPlaylistDialog')?.classList.contains('show') ||
+      document.getElementById('screenManageDialog')?.classList.contains('show') ||
+      document.getElementById('deleteScreenDialog')?.classList.contains('show')
+    );
+  }
+
+  function returnToScreensWithoutTrailChange(){
+    const next = {view:'screens', statusFilter:'all', requestId:null};
+    currentAdminState = normalizeAdminState(next);
+    setView('screens');
+    closeRequestDirect();
+    updateAdminBackButton();
+  }
+
+  function closeTopAdminOverlayForBack(){
+    const playlist = document.getElementById('screenPlaylistDialog');
+    if (playlist?.classList.contains('show')){
+      closeScreenPlaylist();
+      return true;
+    }
+
+    const modalIds = [
+      'screenManageDialog',
+      'deleteScreenDialog',
+      'internalAdDialog',
+      'screenAssignmentDialog',
+      'creativeUploadDialog',
+      'changeRequestDialog'
+    ];
+
+    for (const id of modalIds){
+      const dialog = document.getElementById(id);
+      if (!dialog?.classList.contains('show')) continue;
+      const closeButton = dialog.querySelector('.change-dialog-close, [data-screen-manage-cancel], [data-delete-screen-cancel]');
+      if (closeButton) closeButton.click();
+      else dialog.classList.remove('show');
+      return true;
+    }
+
+    return false;
+  }
+
   function updateAdminBackButton(){
     const btn = document.getElementById('adminBack');
     if (!btn) return;
-    btn.hidden = adminTrail.length === 0;
+    const atRoot = sameAdminState(currentAdminState, {view:'dashboard',statusFilter:'all',requestId:null});
+    btn.hidden = adminTrail.length === 0 && atRoot && !screenOverlayIsOpen();
   }
 
   function setView(name){
@@ -564,6 +611,11 @@
   }
 
   function goAdminBack(){
+    if (closeTopAdminOverlayForBack()) {
+      updateAdminBackButton();
+      return;
+    }
+
     if (!adminTrail.length) {
       // At the Admin root there is nowhere internal to go back to.
       // Stay on Dashboard; leaving Admin is explicit via the logo/site link.
@@ -623,9 +675,10 @@
   window.addEventListener('popstate', () => {
     if (sessionStorage.getItem(SESSION_KEY) !== '1' || !browserBackArmed) return;
 
-    // Map the browser's Back gesture/button to one exact Admin step,
-    // then re-arm the same-document trap.
-    goAdminBack();
+    // On iPhone/browser Back, an open overlay is closed first.
+    // Only the next Back moves through the Admin trail.
+    if (!closeTopAdminOverlayForBack()) goAdminBack();
+
     const baseUrl = location.href.split('#')[0];
     history.pushState({ksAdminTrap:true}, '', `${baseUrl}#admin`);
   });
@@ -798,6 +851,12 @@
   }
 
   function openScreenDialog(id=null){
+    if (currentAdminState.view !== 'screens') {
+      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
+    } else {
+      returnToScreensWithoutTrailChange();
+    }
+
     const existing = id ? screenById(id) : null;
 
     let dialog = document.getElementById('screenManageDialog');
@@ -848,10 +907,15 @@
         dialog.classList.remove('show');
         dialog.dataset.screenId = '';
         unlockAdminPageScroll();
+        returnToScreensWithoutTrailChange();
       };
 
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
-      dialog.querySelector('[data-screen-manage-cancel]').addEventListener('click', close);
+      dialog.querySelector('[data-screen-manage-cancel]').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      });
       dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
 
       dialog.querySelector('[data-screen-manage-save]').addEventListener('click', () => {
@@ -936,6 +1000,12 @@
   }
 
   function openDeleteScreenDialog(id){
+    if (currentAdminState.view !== 'screens') {
+      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
+    } else {
+      returnToScreensWithoutTrailChange();
+    }
+
     const screen = screenById(id);
     if (!screen) return;
 
@@ -970,10 +1040,15 @@
         dialog.classList.remove('show');
         dialog.dataset.screenId = '';
         unlockAdminPageScroll();
+        returnToScreensWithoutTrailChange();
       };
 
       dialog.querySelector('.change-dialog-close').addEventListener('click', close);
-      dialog.querySelector('[data-delete-screen-cancel]').addEventListener('click', close);
+      dialog.querySelector('[data-delete-screen-cancel]').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      });
       dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
 
       dialog.querySelector('[data-delete-screen-confirm]').addEventListener('click', () => {
@@ -1260,11 +1335,13 @@
 
   function closeScreenPlaylist(){
     const dialog = document.getElementById('screenPlaylistDialog');
-    if (!dialog) return;
+    if (!dialog || !dialog.classList.contains('show')) return;
     dialog.classList.remove('show');
     activePlaylistScreenId = null;
     playlistPreviewUrls.forEach(url => URL.revokeObjectURL(url));
     playlistPreviewUrls = [];
+    unlockAdminPageScroll();
+    returnToScreensWithoutTrailChange();
   }
 
   function ensurePlaylistDialog(){
@@ -1298,7 +1375,13 @@
     document.body.appendChild(dialog);
 
     dialog.querySelector('.playlist-dialog-close').addEventListener('click', closeScreenPlaylist);
-    dialog.querySelector('[data-playlist-close]').addEventListener('click', closeScreenPlaylist);
+    dialog.querySelectorAll('[data-playlist-close]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeScreenPlaylist();
+      });
+    });
     dialog.addEventListener('click', e => {
       if (e.target === dialog) closeScreenPlaylist();
     });
@@ -1339,6 +1422,12 @@
   function renderScreenPlaylist(screenId){
     const screen = screenById(screenId);
     if (!screen) return;
+
+    if (currentAdminState.view !== 'screens') {
+      navigateAdmin({view:'screens',statusFilter:'all',requestId:null});
+    } else {
+      returnToScreensWithoutTrailChange();
+    }
 
     activePlaylistScreenId = screenId;
     const dialog = ensurePlaylistDialog();
@@ -1430,7 +1519,9 @@
       }).join('');
     }
 
+    lockAdminPageScroll();
     dialog.classList.add('show');
+    updateAdminBackButton();
     renderPlaylistPreviews(screenId);
   }
 
