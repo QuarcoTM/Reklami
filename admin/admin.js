@@ -56,11 +56,16 @@
   ];
 
   function normalizeScreen(screen){
+    let status = String(screen?.status || '').trim();
+    if (!['hidden','published','stopped'].includes(status)){
+      status = screen?.active === false ? 'stopped' : 'published';
+    }
     return {
       id:String(screen?.id || '').trim(),
       name:String(screen?.name || 'Екран').trim(),
       description:String(screen?.description || '').trim(),
-      active:screen?.active !== false,
+      status,
+      active:status === 'published',
       yodeckPlayerId:String(screen?.yodeckPlayerId || '').trim(),
       createdAt:screen?.createdAt || null,
       updatedAt:screen?.updatedAt || null
@@ -90,9 +95,19 @@
     return SCREEN_CATALOG.find(s => s.id === id) || null;
   }
 
+  function isScreenPublished(screen){
+    return screen?.status === 'published';
+  }
+
+  function screenStatusLabel(screen){
+    if (screen?.status === 'hidden') return 'СКРИТ / ПОДГОТОВКА';
+    if (screen?.status === 'stopped') return 'ВРЕМЕННО СПРЯН';
+    return 'ПУБЛИКУВАН';
+  }
+
   function selectableScreens(currentIds=[]){
     const current = new Set(currentIds || []);
-    return SCREEN_CATALOG.filter(screen => screen.active !== false || current.has(screen.id));
+    return SCREEN_CATALOG.filter(screen => isScreenPublished(screen) || current.has(screen.id));
   }
 
   function screenLabelHTML(screen){
@@ -114,20 +129,20 @@
   }
 
   function screenLimitText(r){
-    if (r.package === 'single') return 'SINGLE: избери точно 1 активен екран.';
-    if (r.package === 'local') return 'LOCAL: избери от 1 до 3 активни екрана.';
-    const activeCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+    if (r.package === 'single') return 'SINGLE: избери точно 1 публикуван екран.';
+    if (r.package === 'local') return 'LOCAL: избери от 1 до 3 публикувани екрана.';
+    const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
     return activeCount >= 4
-      ? 'CITY: избери 4 или 5 активни екрана.'
-      : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните активни екрани.';
+      ? 'CITY: избери 4 или 5 публикувани екрана.'
+      : 'CITY: стандартно е 4–5 екрана. Докато мрежата е по-малка, demo режимът допуска наличните публикувани екрани.';
   }
 
   function screenSelectionValidForActivation(r){
-    const valid = (r.assignedScreens || []).filter(id => screenById(id)?.active !== false && screenById(id));
+    const valid = (r.assignedScreens || []).filter(id => isScreenPublished(screenById(id)));
     const count = valid.length;
     if (r.package === 'single') return count === 1;
     if (r.package === 'local') return count >= 1 && count <= 3;
-    const activeCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+    const activeCount = SCREEN_CATALOG.filter(isScreenPublished).length;
     return activeCount >= 4 ? count >= 4 && count <= 5 : count >= 1;
   }
 
@@ -800,7 +815,7 @@
             <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
           </div>
 
-          <p class="change-dialog-help">Новият екран ще се появи автоматично при разпределяне на кампании и при собствени реклами.</p>
+          <p class="change-dialog-help">Новият екран се създава като „Скрит / Подготовка“. Подготвяш го спокойно и натискаш „Покажи екрана“, когато е готов.</p>
 
           <div class="internal-ad-form">
             <label>
@@ -822,7 +837,7 @@
           </div>
 
           <div class="change-dialog-actions">
-            <button type="button" class="btn btn-light" data-screen-manage-cancel>Отказ</button>
+            <button type="button" class="btn btn-light" data-screen-manage-cancel>← Назад към екраните</button>
             <button type="button" class="btn btn-primary" data-screen-manage-save>Запази екрана</button>
           </div>
         </section>`;
@@ -873,7 +888,8 @@
             id:makeScreenId(),
             name,
             description,
-            active:true,
+            status:'hidden',
+            active:false,
             yodeckPlayerId,
             createdAt:now,
             updatedAt:now
@@ -899,34 +915,111 @@
     requestAnimationFrame(() => dialog.querySelector('#screenManageName')?.focus());
   }
 
-  function toggleScreen(id){
+  function setScreenStatus(id, status){
+    if (!['hidden','published','stopped'].includes(status)) return;
+
     const screens = loadScreenCatalog();
     const screen = screens.find(s => s.id === id);
     if (!screen) return;
 
-    screen.active = screen.active === false;
+    screen.status = status;
+    screen.active = status === 'published';
     screen.updatedAt = new Date().toISOString();
     saveScreenCatalog(screens);
     renderAll();
 
     if (activePlaylistScreenId === id) renderScreenPlaylist(id);
-    toast(screen.active ? 'Екранът е включен.' : 'Екранът е временно спрян.');
+
+    if (status === 'published') toast('Екранът вече е публикуван и може да се използва в кампании.');
+    if (status === 'hidden') toast('Екранът е скрит и остава видим само в Admin.');
+    if (status === 'stopped') toast('Екранът е временно спрян. Настройките и playlist-ът са запазени.');
   }
 
-  function deleteScreen(id){
+  function openDeleteScreenDialog(id){
     const screen = screenById(id);
     if (!screen) return;
 
     const usage = screenUsage(id);
-    if (usage.total){
-      toast(`Екранът се използва в ${usage.total} запис${usage.total===1?'':'а'}. Спри го вместо да го изтриваш.`);
-      return;
+
+    let dialog = document.getElementById('deleteScreenDialog');
+    if (!dialog){
+      dialog = document.createElement('div');
+      dialog.id = 'deleteScreenDialog';
+      dialog.className = 'change-dialog-backdrop';
+      dialog.innerHTML = `
+        <section class="change-dialog delete-screen-dialog" role="dialog" aria-modal="true">
+          <div class="change-dialog-head">
+            <div>
+              <span class="section-kicker">ИЗТРИВАНЕ НА ЕКРАН</span>
+              <h3 id="deleteScreenTitle">Изтрий екран</h3>
+            </div>
+            <button type="button" class="change-dialog-close" aria-label="Затвори">×</button>
+          </div>
+
+          <div id="deleteScreenBody" class="delete-screen-body"></div>
+
+          <div class="change-dialog-actions">
+            <button type="button" class="btn btn-light" data-delete-screen-cancel>← Назад към екраните</button>
+            <button type="button" class="btn btn-danger" data-delete-screen-confirm>Да, изтрий екрана</button>
+          </div>
+        </section>`;
+      document.body.appendChild(dialog);
+
+      const close = () => {
+        if (!dialog.classList.contains('show')) return;
+        dialog.classList.remove('show');
+        dialog.dataset.screenId = '';
+        unlockAdminPageScroll();
+      };
+
+      dialog.querySelector('.change-dialog-close').addEventListener('click', close);
+      dialog.querySelector('[data-delete-screen-cancel]').addEventListener('click', close);
+      dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
+
+      dialog.querySelector('[data-delete-screen-confirm]').addEventListener('click', () => {
+        const screenId = dialog.dataset.screenId;
+        const current = screenById(screenId);
+        if (!current) {
+          close();
+          return;
+        }
+
+        const currentUsage = screenUsage(screenId);
+        if (currentUsage.total){
+          dialog.querySelector('#deleteScreenBody').innerHTML = `
+            <div class="delete-screen-warning">
+              <strong>Този екран не може да бъде изтрит.</strong>
+              <span>Използва се в ${currentUsage.requests.length} клиентски запис(а) и ${currentUsage.internalAds.length} собствен(и) реклам(и). Първо махни тези връзки или го остави „Скрит“.</span>
+            </div>`;
+          dialog.querySelector('[data-delete-screen-confirm]').hidden = true;
+          return;
+        }
+
+        saveScreenCatalog(loadScreenCatalog().filter(s => s.id !== screenId));
+        close();
+        renderAll();
+        toast('Екранът е изтрит.');
+      });
     }
 
-    if (!confirm(`Изтрий екрана „${screen.name}“?`)) return;
-    saveScreenCatalog(loadScreenCatalog().filter(s => s.id !== id));
-    renderAll();
-    toast('Екранът е изтрит.');
+    dialog.dataset.screenId = id;
+    dialog.querySelector('#deleteScreenTitle').textContent = `Изтрий „${screen.name}“?`;
+
+    const confirmBtn = dialog.querySelector('[data-delete-screen-confirm]');
+    confirmBtn.hidden = usage.total > 0;
+
+    dialog.querySelector('#deleteScreenBody').innerHTML = usage.total
+      ? `<div class="delete-screen-warning">
+          <strong>Този екран не може да бъде изтрит в момента.</strong>
+          <span>Използва се в ${usage.requests.length} клиентски запис(а) и ${usage.internalAds.length} собствен(и) реклам(и). Можеш да го скриеш или временно да го спреш.</span>
+        </div>`
+      : `<div class="delete-screen-confirmation">
+          <strong>Това действие е окончателно.</strong>
+          <span>Екранът няма активни връзки. За да продължиш, натисни червения бутон „Да, изтрий екрана“.</span>
+        </div>`;
+
+    lockAdminPageScroll();
+    dialog.classList.add('show');
   }
 
   function renderInternalAds(){
@@ -1065,7 +1158,7 @@
     existingFile.textContent=existing?.file?`Текущ файл: ${existing.file.name}`:'';
     const selected=new Set(existing?.assignedScreens||[]);
     dialog.querySelector('#internalAdScreens').innerHTML=selectableScreens(existing?.assignedScreens||[]).map(screen=>`
-      <label class="screen-option ${screen.active===false?'is-screen-off':''}"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${screen.active===false?'disabled':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}${screen.active===false?' · СПРЯН':''}</strong><small>${esc(screen.description||'Без описание')}</small></span></label>`).join('');
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''}"><input type="checkbox" name="internalAdScreen" value="${esc(screen.id)}" ${selected.has(screen.id)?'checked':''} ${!isScreenPublished(screen)?'disabled':''}><span class="screen-option-check">✓</span><span class="screen-option-copy"><strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:''}</strong><small>${esc(screen.description||'Без описание')}</small></span></label>`).join('');
     lockAdminPageScroll();
     dialog.classList.add('show');
     requestAnimationFrame(() => {
@@ -1098,17 +1191,20 @@
 
       const active = allPlaylistItems(screen.id);
       const configuredPlaying = active.filter(r => !getScreenSetting(r, screen.id).paused);
-      const playing = screen.active === false ? [] : configuredPlaying;
+      const playing = isScreenPublished(screen) ? configuredPlaying : [];
       const paused = active.length - configuredPlaying.length;
       const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screen.id).duration, 0);
 
+      const cardClass = screen.status === 'hidden' ? 'screen-is-hidden' : (screen.status === 'stopped' ? 'screen-is-disabled' : '');
+      const statusClass = screen.status === 'hidden' ? 'status-waiting' : (screen.status === 'stopped' ? 'status-done' : 'status-active');
+
       return `
-        <article class="screen-card panel ${screen.active===false?'screen-is-disabled':''}">
+        <article class="screen-card panel ${cardClass}">
           <div class="screen-preview"><div class="fake-tv"><span>${screenLabelHTML(screen)}</span></div></div>
           <div class="screen-meta">
             <div class="screen-card-top">
-              <span class="status-pill ${screen.active===false?'status-done':(playing.length ? 'status-active' : 'status-draft')}">
-                ${screen.active===false ? 'ЕКРАНЪТ Е СПРЯН' : (playing.length ? `${playing.length} ${playing.length === 1 ? 'излъчвана реклама' : 'излъчвани реклами'}` : 'Няма излъчвани реклами')}
+              <span class="status-pill ${statusClass}">
+                ${screenStatusLabel(screen)}
               </span>
             </div>
             <h3>${esc(screen.name)}</h3>
@@ -1141,7 +1237,17 @@
 
             <div class="screen-manage-actions">
               <button class="btn btn-light" data-edit-screen="${esc(screen.id)}">Редактирай</button>
-              <button class="btn ${screen.active===false?'btn-success':'btn-warning'}" data-toggle-screen="${esc(screen.id)}">${screen.active===false?'Включи':'Спри екрана'}</button>
+
+              ${screen.status === 'hidden' ? `
+                <button class="btn btn-success" data-set-screen-status="published" data-screen-id="${esc(screen.id)}">Покажи екрана</button>
+              ` : screen.status === 'stopped' ? `
+                <button class="btn btn-success" data-set-screen-status="published" data-screen-id="${esc(screen.id)}">Пусни отново</button>
+                <button class="btn btn-light" data-set-screen-status="hidden" data-screen-id="${esc(screen.id)}">Скрий</button>
+              ` : `
+                <button class="btn btn-warning" data-set-screen-status="stopped" data-screen-id="${esc(screen.id)}">Спри временно</button>
+                <button class="btn btn-light" data-set-screen-status="hidden" data-screen-id="${esc(screen.id)}">Скрий</button>
+              `}
+
               <button class="btn btn-danger" data-delete-screen="${esc(screen.id)}">Изтрий</button>
             </div>
           </div>
@@ -1172,6 +1278,7 @@
       <section class="playlist-dialog" role="dialog" aria-modal="true">
         <div class="playlist-dialog-head">
           <div>
+            <button type="button" class="playlist-back-link" data-playlist-close>← Назад към екраните</button>
             <span class="section-kicker">ЕКРАН / ПЛЕЙЛИСТ</span>
             <h2 id="playlistDialogTitle">Плейлист</h2>
             <p id="playlistDialogSubtitle"></p>
@@ -1241,17 +1348,19 @@
 
     const items = allPlaylistItems(screenId);
     const configuredPlaying = items.filter(r => !getScreenSetting(r, screenId).paused);
-    const playing = screen.active === false ? [] : configuredPlaying;
+    const playing = isScreenPublished(screen) ? configuredPlaying : [];
     const pausedCount = items.length - configuredPlaying.length;
     const cycle = playing.reduce((sum,r) => sum + getScreenSetting(r, screenId).duration, 0);
 
     dialog.querySelector('#playlistDialogTitle').textContent = `${screen.name} — Playlist`;
     dialog.querySelector('#playlistDialogSubtitle').textContent =
-      screen.active === false
-        ? 'Екранът е временно спрян. Playlist-ът е запазен, но нищо не се счита за излъчвано.'
-        : (items.length
-          ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
-          : 'Няма активни кампании, разпределени към този екран.');
+      screen.status === 'hidden'
+        ? 'Екранът е „Скрит / Подготовка“. Playlist-ът може да се подготвя, но екранът още не е публикуван.'
+        : screen.status === 'stopped'
+          ? 'Екранът е временно спрян. Playlist-ът е запазен, но нищо не се счита за излъчвано.'
+          : (items.length
+            ? 'Подреди рекламите, избери 8–10 сек. и при нужда спри само една реклама на този екран.'
+            : 'Няма активни кампании, разпределени към този екран.');
 
     dialog.querySelector('#playlistSummary').innerHTML = `
       <div><span>Активни кампании</span><strong>${items.length}</strong></div>
@@ -1722,7 +1831,7 @@
           return;
         }
 
-        const activeNetworkCount = SCREEN_CATALOG.filter(s => s.active !== false).length;
+        const activeNetworkCount = SCREEN_CATALOG.filter(isScreenPublished).length;
         if (req.package === 'city' && activeNetworkCount >= 4 && (selected.length < 4 || selected.length > 5)){
           error.textContent = 'Пакет CITY трябва да бъде на 4 или 5 активни екрана.';
           error.hidden = false;
@@ -1751,11 +1860,11 @@
     const options = dialog.querySelector('#screenAssignmentOptions');
 
     options.innerHTML = selectableScreens(r.assignedScreens||[]).map(screen => `
-      <label class="screen-option ${screen.active===false?'is-screen-off':''}">
-        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''} ${screen.active===false?'disabled':''}>
+      <label class="screen-option ${!isScreenPublished(screen)?'is-screen-off':''}">
+        <input type="${inputType}" name="assignedScreen" value="${esc(screen.id)}" ${selected.has(screen.id) ? 'checked' : ''} ${!isScreenPublished(screen)?'disabled':''}>
         <span class="screen-option-check">✓</span>
         <span class="screen-option-copy">
-          <strong>${esc(screen.name)}${screen.active===false?' · СПРЯН':''}</strong>
+          <strong>${esc(screen.name)}${!isScreenPublished(screen)?` · ${screenStatusLabel(screen)}`:''}</strong>
           <small>${esc(screen.description || 'Без описание')}</small>
         </span>
       </label>`).join('');
@@ -2033,11 +2142,11 @@
     const editScreen = e.target.closest('[data-edit-screen]');
     if (editScreen) openScreenDialog(editScreen.dataset.editScreen);
 
-    const toggleScreenBtn = e.target.closest('[data-toggle-screen]');
-    if (toggleScreenBtn) toggleScreen(toggleScreenBtn.dataset.toggleScreen);
+    const statusScreenBtn = e.target.closest('[data-set-screen-status]');
+    if (statusScreenBtn) setScreenStatus(statusScreenBtn.dataset.screenId, statusScreenBtn.dataset.setScreenStatus);
 
     const deleteScreenBtn = e.target.closest('[data-delete-screen]');
-    if (deleteScreenBtn) deleteScreen(deleteScreenBtn.dataset.deleteScreen);
+    if (deleteScreenBtn) openDeleteScreenDialog(deleteScreenBtn.dataset.deleteScreen);
 
     const editInternal = e.target.closest('[data-edit-internal-ad]');
     if (editInternal) openInternalAdDialog(editInternal.dataset.editInternalAd);

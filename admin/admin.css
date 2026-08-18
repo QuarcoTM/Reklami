@@ -1081,3 +1081,95 @@ body.admin-modal-open{
     grid-template-columns:1fr;
   }
 }
+
+
+/* v2.6 — screen visibility lifecycle + safer navigation/delete */
+.screen-is-hidden{
+  background:#fffaf0;
+}
+.screen-is-hidden .screen-preview{
+  opacity:.72;
+  filter:saturate(.7);
+}
+.screen-is-hidden .screen-campaign-row{
+  opacity:.72;
+}
+
+.playlist-back-link{
+  display:inline-flex;
+  align-items:center;
+  margin:0 0 9px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--blue);
+  font:inherit;
+  font-size:13px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+.delete-screen-dialog{
+  width:min(560px,100%);
+}
+.delete-screen-body{
+  margin:16px 0 4px;
+}
+.delete-screen-warning,
+.delete-screen-confirmation{
+  padding:16px;
+  border-radius:15px;
+}
+.delete-screen-warning{
+  background:#fff3df;
+  border:1px solid #ecd1a7;
+  color:#855714;
+}
+.delete-screen-confirmation{
+  background:#fff1f1;
+  border:1px solid #efc7c7;
+  color:#8c3030;
+}
+.delete-screen-warning strong,
+.delete-screen-warning span,
+.delete-screen-confirmation strong,
+.delete-screen-confirmation span{
+  display:block;
+}
+.delete-screen-warning span,
+.delete-screen-confirmation span{
+  margin-top:6px;
+  line-height:1.5;
+}
+
+.screen-manage-actions{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.screen-manage-actions .btn-danger{
+  grid-column:1 / -1;
+}
+
+@media(max-width:600px){
+  #screenManageDialog.change-dialog-backdrop,
+  #deleteScreenDialog.change-dialog-backdrop{
+    padding:10px;
+    align-items:center;
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+
+  #screenManageDialog .screen-manage-dialog,
+  #deleteScreenDialog .delete-screen-dialog{
+    max-height:calc(100dvh - 20px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .screen-manage-actions{
+    grid-template-columns:1fr;
+  }
+  .screen-manage-actions .btn-danger{
+    grid-column:auto;
+  }
+}
