@@ -1380,3 +1380,23 @@ body.admin-modal-open{
     max-height:190px;
   }
 }
+
+
+/* v2.7.2 — full photo, no crop */
+.screen-preview.has-location-photo{
+  background:#efede7 !important;
+}
+
+.screen-preview.has-location-photo>img{
+  object-fit:contain !important;
+  object-position:center !important;
+}
+
+.screen-photo-editor-preview{
+  background:#efede7 !important;
+}
+
+.screen-photo-editor-preview>img{
+  object-fit:contain !important;
+  object-position:center !important;
+}

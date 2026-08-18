@@ -506,11 +506,15 @@
   document.getElementById('enterDemo').addEventListener('click', enterAdmin);
   document.getElementById('exitDemo').addEventListener('click', () => {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('ks_admin_state_v1');
+    sessionStorage.removeItem('ks_admin_trail_v1');
     location.reload();
   });
 
   // Deterministic Admin navigation.
   // We keep our own trail instead of relying on the browser's mixed page history.
+  const ADMIN_STATE_KEY = 'ks_admin_state_v1';
+  const ADMIN_TRAIL_KEY = 'ks_admin_trail_v1';
   const titles = {dashboard:'Табло',requests:'Заявки',clients:'Клиенти',screens:'Екрани',creatives:'Материали'};
   let adminTrail = [];
   let currentAdminState = {view:'dashboard', statusFilter:'all', requestId:null};
@@ -522,6 +526,40 @@
       statusFilter: state.view === 'requests' ? (state.statusFilter || 'all') : 'all',
       requestId: state.requestId || null
     };
+  }
+
+  function saveAdminNavigationState(){
+    try{
+      sessionStorage.setItem(ADMIN_STATE_KEY, JSON.stringify(normalizeAdminState(currentAdminState)));
+      sessionStorage.setItem(ADMIN_TRAIL_KEY, JSON.stringify(
+        adminTrail.slice(-40).map(normalizeAdminState)
+      ));
+    }catch(e){}
+  }
+
+  function loadSavedAdminState(){
+    try{
+      const raw = JSON.parse(sessionStorage.getItem(ADMIN_STATE_KEY) || 'null');
+      if (!raw) return null;
+      const state = normalizeAdminState(raw);
+      if (!['dashboard','requests','clients','screens','creatives'].includes(state.view)) return null;
+      return state;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function loadSavedAdminTrail(){
+    try{
+      const raw = JSON.parse(sessionStorage.getItem(ADMIN_TRAIL_KEY) || '[]');
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .map(normalizeAdminState)
+        .filter(s => ['dashboard','requests','clients','screens','creatives'].includes(s.view))
+        .slice(-40);
+    }catch(e){
+      return [];
+    }
   }
 
   function sameAdminState(a,b){
@@ -642,6 +680,7 @@
     }
 
     updateAdminBackButton();
+    saveAdminNavigationState();
   }
 
   function navigateAdmin(state){
@@ -650,6 +689,7 @@
 
     adminTrail.push({...currentAdminState});
     applyAdminState(next);
+    saveAdminNavigationState();
   }
 
   function goAdminBack(){
@@ -668,11 +708,19 @@
 
     const previous = adminTrail.pop();
     applyAdminState(previous);
+    saveAdminNavigationState();
   }
 
   function initAdminNavigation(){
-    adminTrail = [];
-    currentAdminState = {view:'dashboard', statusFilter:'all', requestId:null};
+    const savedState = loadSavedAdminState();
+    adminTrail = loadSavedAdminTrail();
+    currentAdminState = savedState || {view:'dashboard', statusFilter:'all', requestId:null};
+
+    // If a request was removed since the saved session, restore its parent view instead.
+    if (currentAdminState.requestId && !loadRequests().some(r => r.id === currentAdminState.requestId)){
+      currentAdminState.requestId = null;
+    }
+
     applyAdminState(currentAdminState);
 
     // Browser Back trap:
