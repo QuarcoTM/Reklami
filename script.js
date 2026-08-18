@@ -170,13 +170,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function publicRequestOccupiesSlot(request){
-    if (!request || ['done','rejected'].includes(String(request.status || ''))) return false;
-
-    if (request.status === 'active' && request.expiresAt){
-      const expires = new Date(request.expiresAt);
-      if (!Number.isNaN(expires.getTime()) && expires <= new Date()) return false;
+    if (!request) return false;
+    const status=String(request.status || '');
+    const now=Date.now();
+    if (['done','rejected'].includes(status)) return false;
+    if (status==='paid') return false;
+    if (status==='scheduled'){
+      const start=new Date(request.scheduledStartAt || request.activeAt || 0).getTime();
+      const end=new Date(request.scheduledEndAt || request.expiresAt || 0).getTime();
+      return Number.isFinite(start) && Number.isFinite(end) && start<=now && now<end;
     }
-    return true;
+    if (status==='active'){
+      if(!request.expiresAt) return true;
+      const end=new Date(request.expiresAt).getTime();
+      return !Number.isFinite(end) || now<end;
+    }
+    return false;
   }
 
   function publicScreenCapacity(screenId){
