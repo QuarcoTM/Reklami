@@ -11,6 +11,7 @@
     changes:  { label:'Нужна корекция', cls:'status-changes' },
     waiting:  { label:'Одобрена · чака плащане', cls:'status-waiting' },
     paid:     { label:'Платена', cls:'status-paid' },
+    scheduled:{ label:'Планирана', cls:'status-scheduled' },
     active:   { label:'Излъчва се', cls:'status-active' },
     done:     { label:'Приключена', cls:'status-done' },
     rejected: { label:'Отказана', cls:'status-rejected' }
@@ -72,6 +73,28 @@
     const now = Date.now();
 
     requests.forEach(r => {
+      if (r.status === 'scheduled') {
+        const start = new Date(r.scheduledStartAt || r.activeAt || 0).getTime();
+        const end = new Date(r.scheduledEndAt || r.expiresAt || 0).getTime();
+        if (Number.isFinite(end) && end > 0 && end <= now){
+          r.status = 'done';
+          r.activeAt = r.activeAt || (Number.isFinite(start) && start > 0 ? new Date(start).toISOString() : null);
+          r.expiresAt = new Date(end).toISOString();
+          r.completedAt = new Date().toISOString();
+          r.completionReason = 'expired';
+          changed = true;
+          return;
+        }
+        if (Number.isFinite(start) && start > 0 && start <= now){
+          r.status = 'active';
+          r.activeAt = new Date(start).toISOString();
+          if (Number.isFinite(end) && end > 0) r.expiresAt = new Date(end).toISOString();
+          r.activatedFromScheduleAt = new Date().toISOString();
+          changed = true;
+          return;
+        }
+      }
+
       if (r.status === 'active' && r.expiresAt && new Date(r.expiresAt).getTime() <= now) {
         r.status = 'done';
         r.completedAt = new Date().toISOString();
@@ -177,7 +200,7 @@
     const greeting = first?.name ? `, ${first.name.split(' ')[0]}` : '';
     document.getElementById('clientGreeting').textContent=greeting;
 
-    const paidStatuses=['paid','active','done'];
+    const paidStatuses=['paid','scheduled','active','done'];
     const stats={
       all:requests.length,
       action:requests.filter(r=>['changes','waiting'].includes(r.status)).length,
@@ -219,6 +242,8 @@
           : `<div class="payment-alert">● Заявката е готова за плащане. След свързване на платежния оператор тук ще се появи бутон „Плати €${Number(r.total||0)}“.</div>`)
         : r.status==='changes'
         ? `<div class="payment-alert change-alert"><div><strong>● Нужна е промяна</strong><span>${esc(r.changeRequestText || 'Отвори детайлите на заявката, за да видиш какво е необходимо.')}</span></div></div>`
+        : r.status==='scheduled' && r.scheduledStartAt
+        ? `<div class="payment-alert active-period-alert"><div><strong>● Кампанията е планирана</strong><span>${formatDate(r.scheduledStartAt)} → ${formatDate(r.scheduledEndAt || r.expiresAt)} · ще стартира автоматично</span></div></div>`
         : r.status==='active' && r.expiresAt
         ? `<div class="payment-alert active-period-alert"><div><strong>● Кампанията се излъчва</strong><span>Активна до ${formatDate(r.expiresAt)} · ${clientTimeLeft(r)}</span></div></div>`
         : '';
@@ -249,14 +274,14 @@
 
   function statusTimeline(r){
     const stages=['new','waiting','paid','active','done'];
-    let currentIndex=stages.indexOf(r.status);
+    let currentIndex=r.status==='scheduled' ? 3 : stages.indexOf(r.status);
     if(r.status==='changes') currentIndex=0;
     if(r.status==='rejected') currentIndex=-1;
     const labels=[
       ['Получена','Заявката е изпратена за преглед.'],
       ['Одобрена','Крайната сума е потвърдена.'],
       ['Платена','Плащането е получено.'],
-      ['Излъчва се','Рекламата е активна на избраните екрани.'],
+      [r.status==='scheduled'?'Планирана':'Излъчва се', r.status==='scheduled'?'Има запазен период и екрани.':'Рекламата е активна на избраните екрани.'],
       ['Приключена','Кампанията е завършена.']
     ];
     if(r.status==='rejected'){
@@ -276,6 +301,7 @@
       return `<div class="action-box"><h3>Плащане: €${Number(r.total||0)}</h3><p>Заявката и рекламната визия са готови. След като свържем платежния оператор, тук ще имаш директен бутон за плащане.</p><button class="btn btn-blue payment-btn" disabled>Плати €${Number(r.total||0)}</button></div>`;
     }
     if(r.status==='paid') return `<div class="action-box"><h3>Плащането е получено ✓</h3><p>Подготвяме рекламата за планиране и излъчване.</p></div>`;
+    if(r.status==='scheduled') return `<div class="action-box"><h3>Кампанията е планирана</h3><p>Старт: ${formatDate(r.scheduledStartAt)} · край: ${formatDate(r.scheduledEndAt || r.expiresAt)}. Ще премине автоматично към излъчване на началната дата.</p></div>`;
     if(r.status==='active') return `<div class="action-box"><h3>Рекламата се излъчва</h3><p>След реалното свързване на екраните тук ще показваме и конкретните локации и период.</p></div>`;
     return '';
   }
@@ -305,13 +331,14 @@
           <div class="order-line total"><span>Общо</span><strong>€${Number(r.total||0)}</strong></div>
         </div>
       </div>
-      ${(r.activeAt || r.expiresAt) ? `
+      ${(r.activeAt || r.expiresAt || r.scheduledStartAt || r.scheduledEndAt) ? `
       <div class="detail-section">
         <h4>Период на кампанията</h4>
         <div class="detail-grid">
-          <div class="detail-box"><span>Начало</span><strong>${r.activeAt ? formatDate(r.activeAt) : '—'}</strong></div>
-          <div class="detail-box"><span>Край</span><strong>${r.expiresAt ? formatDate(r.expiresAt) : '—'}</strong></div>
+          <div class="detail-box"><span>Начало</span><strong>${(r.status==='scheduled' ? r.scheduledStartAt : r.activeAt) ? formatDate(r.status==='scheduled' ? r.scheduledStartAt : r.activeAt) : '—'}</strong></div>
+          <div class="detail-box"><span>Край</span><strong>${(r.status==='scheduled' ? (r.scheduledEndAt || r.expiresAt) : r.expiresAt) ? formatDate(r.status==='scheduled' ? (r.scheduledEndAt || r.expiresAt) : r.expiresAt) : '—'}</strong></div>
         </div>
+        ${r.status==='scheduled' ? `<div class="client-period-note"><strong>Планирана</strong><span>Рекламата ще стартира автоматично на ${formatDate(r.scheduledStartAt)}.</span></div>` : ''}
         ${r.status==='active' ? `<div class="client-period-note"><strong>${clientTimeLeft(r)}</strong><span>Ако кампанията бъде подновена, крайният срок ще се удължи автоматично.</span></div>` : ''}
         ${r.status==='done' && r.completionReason==='expired' ? `<div class="client-period-note expired"><strong>Кампанията е приключила</strong><span>Срокът е изтекъл на ${formatDate(r.expiresAt)}.</span></div>` : ''}
       </div>` : ''}

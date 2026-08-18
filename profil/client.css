@@ -94,6 +94,7 @@ button{cursor:pointer}
 .status-changes{background:var(--orange-soft);color:var(--orange)}
 .status-waiting{background:var(--gold-soft);color:#745514}
 .status-paid{background:var(--green-soft);color:var(--green)}
+.status-scheduled{background:#e8f3ff;color:#245f91}
 .status-active{background:#efe9ff;color:#7751aa}
 .status-done{background:#efefef;color:#606060}
 .status-rejected{background:var(--red-soft);color:var(--red)}
