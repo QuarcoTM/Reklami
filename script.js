@@ -287,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (file.type === 'video/mp4' && meta.duration != null){
       result.details.push(`${meta.duration.toFixed(1)} сек.`);
-      if (meta.duration < 8 || meta.duration > 10){
-        result.warnings.push(`Видеото е ${meta.duration.toFixed(1)} сек. Препоръчителната дължина за рекламата е 8–10 сек.`);
+      if (meta.duration < 9.5 || meta.duration > 10.5){
+        result.warnings.push(`Видеото е ${meta.duration.toFixed(1)} сек. Рекламният слот е фиксиран на 10 сек.`);
       }
     }
 
