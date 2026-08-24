@@ -95,11 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const PUBLIC_REQUESTS_KEY = 'ks_demo_requests_v1';
   const PUBLIC_INTERNAL_ADS_KEY = 'ks_internal_ads_v1';
   const PUBLIC_TOTAL_SLOT_LIMIT = 10;
+  const TAXI_SCREEN_MIGRATION_KEY = 'ks_screen_migration_taxi_v1';
 
   const DEFAULT_PUBLIC_SCREENS = [
     {id:'funeral', name:'Траурна агенция', description:'Пилотен екран', active:true},
     {id:'pharmacy', name:'Аптека', description:'Планирана локация', active:true},
-    {id:'restaurant', name:'Заведение', description:'Планирана локация', active:true}
+    {id:'restaurant', name:'Заведение', description:'Планирана локация', active:true},
+    {id:'taxi', name:'Такси', description:'Мобилен екран в такси', active:true}
   ];
 
   const PACKAGE_SCREEN_RULES = {
@@ -128,6 +130,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try{
       const stored = JSON.parse(localStorage.getItem(PUBLIC_SCREENS_KEY) || 'null');
       if (Array.isArray(stored) && stored.length){
+        if (!localStorage.getItem(TAXI_SCREEN_MIGRATION_KEY) && !stored.some(screen => String(screen?.id || '') === 'taxi')){
+          stored.push({id:'taxi', name:'Такси', description:'Мобилен екран в такси', active:true, status:'published', yodeckPlayerId:'', displayMode:'schedule'});
+          localStorage.setItem(PUBLIC_SCREENS_KEY, JSON.stringify(stored));
+          localStorage.setItem(TAXI_SCREEN_MIGRATION_KEY, '1');
+        }
         return stored.map(screen => {
           let status = String(screen?.status || '').trim();
           if (!['hidden','published','stopped'].includes(status)){
@@ -144,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }catch(e){}
 
+    localStorage.setItem(TAXI_SCREEN_MIGRATION_KEY, '1');
     return DEFAULT_PUBLIC_SCREENS.map(screen => ({
       ...screen,
       status:screen.active === false ? 'stopped' : 'published',
