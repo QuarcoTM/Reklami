@@ -57,6 +57,7 @@
 
   const FIXED_SLOT_SECONDS = 10;
   const TOTAL_SCREEN_SLOT_LIMIT = 10;
+  const TAXI_SCREEN_MIGRATION_KEY = 'ks_screen_migration_taxi_v1';
 
   const WEEK_DAYS = [
     {key:'mon', label:'Понеделник', short:'Пн'},
@@ -109,7 +110,8 @@
   const DEFAULT_SCREEN_CATALOG = [
     {id:'funeral', name:'Траурна агенция', description:'Пилотен екран · адресът ще се добави по-късно.', active:true, yodeckPlayerId:'', displayMode:'always'},
     {id:'pharmacy', name:'Аптека', description:'Планирана локация.', active:true, yodeckPlayerId:''},
-    {id:'restaurant', name:'Заведение', description:'Планирана локация.', active:true, yodeckPlayerId:''}
+    {id:'restaurant', name:'Заведение', description:'Планирана локация.', active:true, yodeckPlayerId:''},
+    {id:'taxi', name:'Такси', description:'Мобилен екран в такси.', active:true, yodeckPlayerId:'', displayMode:'schedule'}
   ];
 
   function normalizeScreen(screen){
@@ -163,11 +165,17 @@
     try{
       const raw = JSON.parse(localStorage.getItem(SCREENS_KEY) || 'null');
       if (Array.isArray(raw) && raw.length){
+        if (!localStorage.getItem(TAXI_SCREEN_MIGRATION_KEY) && !raw.some(screen => String(screen?.id || '') === 'taxi')){
+          raw.push({id:'taxi', name:'Такси', description:'Мобилен екран в такси.', active:true, yodeckPlayerId:'', displayMode:'schedule'});
+          localStorage.setItem(SCREENS_KEY, JSON.stringify(raw));
+          localStorage.setItem(TAXI_SCREEN_MIGRATION_KEY, '1');
+        }
         return raw.map(normalizeScreen).filter(s => s.id && s.name);
       }
     }catch(e){}
     const defaults = DEFAULT_SCREEN_CATALOG.map(s => normalizeScreen({...s}));
     localStorage.setItem(SCREENS_KEY, JSON.stringify(defaults));
+    localStorage.setItem(TAXI_SCREEN_MIGRATION_KEY, '1');
     return defaults;
   }
 
